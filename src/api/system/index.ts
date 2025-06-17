@@ -144,12 +144,12 @@ export default {
     stop: (id: number) => put('/system/job/stop', { id }),
     getFunList: () => get('system/job/fun_list'),
   },
-	task_log: {
-		getList: (params: object) => get('/system/job-log/list', params),
-		detail: (id: number) => get('/system/job-log/detail', { id }),
-		del: (ids: number[]) => del('/system/job-log/del', { ids }),
-		export: (params: object) => file('/system/job-log/export', params),
-	},
+  task_log: {
+    getList: (params: object) => get('/system/job_log/list', params),
+    detail: (id: number) => get('/system/job_log/get', { id }),
+    del: (ids: number[]) => del('/system/job_log/delete', { ids }),
+    export: (params: object) => file('/system/job_log/export', params),
+  },
   city: {
     getList: (params: object) => get('/common/city/tree', params),
     add: (data: object) => post('/common/city/add', data),
