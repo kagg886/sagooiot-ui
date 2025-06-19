@@ -188,13 +188,14 @@ const { loading: detailLoading, doLoading: doDetailLoad } = useLoading(async (id
 	<el-card shadow="nover" class="page">
 		<el-form :model="searchParam" inline>
 			<el-form-item label="" prop="jobName">
-				<el-input style="width: 150px" v-model="searchParam.jobName" placeholder="请输入任务名称"></el-input>
+				<el-input style="width: 150px" v-model="searchParam.jobName" placeholder="任务名称"></el-input>
 			</el-form-item>
 			<el-form-item label="" prop="dateRange">
-				<el-date-picker v-model="searchParam.dateRange" style="width: 220px" value-format="YYYY-MM-DD" type="daterange" range-separator="-" start-placeholder="登录时间" end-placeholder="结束时间"></el-date-picker>
+				<el-date-picker v-model="searchParam.dateRange" style="width: 220px" value-format="YYYY-MM-DD" type="daterange" range-separator="-" start-placeholder="开始时间" end-placeholder="结束时间"></el-date-picker>
 			</el-form-item>
 			<el-form-item label="" prop="status">
 				<el-select style="width: 125px" v-model="searchParam.status" placeholder="请选择">
+					<el-option label="全部" :value="undefined"></el-option>
 					<el-option label="成功" :value="StatusEnum.SUCCESS"></el-option>
 					<el-option label="失败" :value="StatusEnum.FAILED"></el-option>
 				</el-select>
