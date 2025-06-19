@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import api from '/@/api/system'
-import { computed, onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { Exception } from 'sass'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useLoading } from '/@/utils/loading-util'
@@ -21,6 +21,7 @@ type TaskLogSummary = {
 	cronExpression: string
 	startTime: string //开始时间
 	endTime?: string //结束时间(仅success/failed拥有)
+	createdAt: string //创建时间
 	status: StatusEnum
 }
 
@@ -113,6 +114,34 @@ const del = async () => {
 	return
 }
 
+const delSingle = async (id: number) => {
+	const confirm = await ElMessageBox.confirm('您确定要删除所选数据吗？', '提示', {
+		confirmButtonText: '确认',
+		cancelButtonText: '取消',
+		type: 'warning',
+	})
+
+	if (confirm != 'confirm') {
+		return
+	}
+	const res = await api.task_log
+		.del([id])
+		.then(() => true)
+		.catch((ex: Exception) => {
+			// eslint-disable-next-line no-console
+			console.log(ex)
+			return false
+		})
+
+	if (!res) {
+		ElMessage.error('删除失败')
+	}
+
+	ElMessage.success('删除成功')
+	await doListLoad()
+	return
+}
+
 //数据选择删除部分结束
 
 //导出日志部分开始
@@ -162,15 +191,7 @@ const { loading: detailLoading, doLoading: doDetailLoad } = useLoading(async (id
 				<el-input style="width: 150px" v-model="searchParam.jobName" placeholder="请输入任务名称"></el-input>
 			</el-form-item>
 			<el-form-item label="" prop="dateRange">
-				<el-date-picker
-					style="width: 220px"
-					v-model="searchParam.dateRange"
-					type="daterange"
-					value-format="yyyy-MM-dd"
-					range-separator="至"
-					start-placeholder="开始日期"
-					end-placeholder="结束日期"
-				></el-date-picker>
+				<el-date-picker v-model="searchParam.dateRange" style="width: 220px" value-format="YYYY-MM-DD" type="daterange" range-separator="-" start-placeholder="登录时间" end-placeholder="结束时间"></el-date-picker>
 			</el-form-item>
 			<el-form-item label="" prop="status">
 				<el-select style="width: 125px" v-model="searchParam.status" placeholder="请选择">
@@ -199,7 +220,7 @@ const { loading: detailLoading, doLoading: doDetailLoad } = useLoading(async (id
 					删除日志
 				</el-button>
 
-				<el-button type="primary" @click="doExport" v-loading="exportLoading">
+				<el-button type="primary" @click="doExport" v-loading="exportLoading" v-auth="'download'">
 					<el-icon>
 						<ele-Download />
 					</el-icon>
@@ -210,13 +231,14 @@ const { loading: detailLoading, doLoading: doDetailLoad } = useLoading(async (id
 
 		<el-table :data="data" style="width: 100%" v-loading="loading" @selection-change="onDeleteItemSelected">
 			<el-table-column type="selection" width="50" align="center"></el-table-column>
-			<el-table-column label="ID" prop="id" width="90" align="center"></el-table-column>
-			<el-table-column label="任务名称" prop="jobName" align="center"></el-table-column>
-			<el-table-column label="功能名称" prop="invokeTarget" align="center"></el-table-column>
-			<el-table-column label="表达式" prop="cronExpression" align="center"></el-table-column>
-			<el-table-column label="开始时间" prop="startTime" align="center"></el-table-column>
-			<el-table-column label="结束时间" prop="endTime" align="center"></el-table-column>
-			<el-table-column label="状态" prop="status" align="center">
+			<el-table-column label="ID" prop="id" width="90" align="center" v-col="'jobId'"></el-table-column>
+			<el-table-column label="任务名称" prop="jobName" align="center" v-col="'jobName'"></el-table-column>
+			<el-table-column label="功能名称" prop="invokeTarget" align="center" v-col="'invokeTaget'"></el-table-column>
+			<el-table-column label="表达式" prop="cronExpression" align="center" v-col="'cronExpression'"></el-table-column>
+			<el-table-column label="开始时间" prop="startTime" align="center" v-col="'startTime'"></el-table-column>
+			<el-table-column label="结束时间" prop="endTime" align="center" v-col="'endTime'"></el-table-column>
+			<el-table-column label="创建时间" prop="createdAt" align="center" v-col="'createdAt'"></el-table-column>
+			<el-table-column label="状态" prop="status" align="center" v-col="'status'">
 				<template #default="scope">
 					<el-tag
 						:type="scope.row.status === StatusEnum.SUCCESS ? 'success' : scope.row.status === StatusEnum.FAILED ? 'danger' : 'info'">
@@ -226,7 +248,7 @@ const { loading: detailLoading, doLoading: doDetailLoad } = useLoading(async (id
 					</el-tag>
 				</template>
 			</el-table-column>
-			<el-table-column label="操作" align="center" width="100">
+			<el-table-column label="操作" align="center" width="180">
 				<template #default="scope">
 					<el-button type="text" size="small" @click="doDetailLoad(scope.row.id)" v-loading="detailLoading && detailForm.id === scope.row.id">
 						<el-icon>
@@ -234,6 +256,7 @@ const { loading: detailLoading, doLoading: doDetailLoad } = useLoading(async (id
 						</el-icon>
 						查看
 					</el-button>
+					<el-button type="text" size="small" @click="delSingle(scope.row.id)" v-auth="'del'">删除</el-button>
 				</template>
 			</el-table-column>
 		</el-table>
@@ -271,10 +294,10 @@ const { loading: detailLoading, doLoading: doDetailLoad } = useLoading(async (id
 					</el-form>
 				</el-tab-pane>
 				<el-tab-pane label="结果" name="1">
-					{{detailForm?.jobMessage}}
+					{{detailForm.jobMessage}}
 				</el-tab-pane>
-				<el-tab-pane label="原因" name="2">
-					{{detailForm?.exceptionInfo}}
+				<el-tab-pane label="失败原因" name="2">
+					{{detailForm.exceptionInfo}}
 				</el-tab-pane>
 			</el-tabs>
 		</el-dialog>
