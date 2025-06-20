@@ -123,6 +123,15 @@ export default {
     detail: (infoId: number) => get('/system/login/log/detail', { infoId }),
     clearLog: () => post('/system/login/log/clear'),
   },
+  file: {
+    list: (path: string) => get('/system/file/list', { path }),
+    upload: (data: Blob) => {
+      const form = new FormData();
+      form.set('file', data)
+
+      return post('/system/file/upload', data)
+    }
+  },
   oper: {
     getList: (params: object) => get('/system/oper/log/list', params),
     del: (operIds: number) => del('/system/oper/log/del', { operIds }),
