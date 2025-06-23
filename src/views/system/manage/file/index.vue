@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import api from '/@/api/system/index'
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useLoading } from '/@/utils/loading-util'
 
@@ -15,6 +15,7 @@ type RemoteFile = {
 type FileTree = Omit<RemoteFile, 'isDir'> & {
 	children?: FileTree[] //文件夹的children为[]，文件的children为undefined
 	parentPath: string[], //父路径
+	loaded?: boolean //标记文件夹内容是否已加载
 }
 
 //当 currentPath为空时，表示根目录
@@ -26,11 +27,17 @@ const currentPath = ref<string[]>([])
 //文件树
 const fileTree = ref<FileTree[]>([])
 
+// 树组件引用
+const treeRef = ref()
+
+// 展开的节点keys
+const expandedKeys = ref<string[]>([])
+
 //启动时加载根目录文件列表
 const { loading, doLoading } = useLoading(async () => {
 	const res: RemoteFile[] = await api.file
 		.list('/')
-		.then((res: { files: RemoteFile[] }) => res.files)
+		.then((res: { files: RemoteFile[] }) => res.files ?? [])
 		.catch((e: Error) => {
 			ElMessage.error(e.message)
 			return []
@@ -40,6 +47,7 @@ const { loading, doLoading } = useLoading(async () => {
 			...item,
 			children: item.isDir ? [] : undefined,
 			parentPath: [],
+			loaded: false, // 初始未加载子内容
 		}
 		return tree
 	})
@@ -58,9 +66,9 @@ const currentFile = computed<FileTree | undefined>({
 				createdAt: '',
 				modTime: '',
 				size: 0,
-				initialized: true,
 				children: fileTree.value,
 				parentPath: [],
+				loaded: true, // 根目录始终标记为已加载
 			}
 		}
 
@@ -103,10 +111,17 @@ const currentFile = computed<FileTree | undefined>({
 //监听currentPath的变化，拉取currentFile的children
 const loadingFetchChildren = ref(false)
 watch(currentPath, async (newVal: string[]) => {
+	// 检查当前文件夹是否已经加载过内容
+	const currentFileValue = currentFile.value
+	if (currentFileValue && currentFileValue.loaded) {
+		// 如果当前文件夹已经加载过，则不重新加载
+		return
+	}
+
 	loadingFetchChildren.value = true
 	const res: RemoteFile[] = await api.file
 		.list(`/${newVal.join('/')}`)
-		.then((res: { files: RemoteFile[] }) => res.files)
+		.then((res: { files: RemoteFile[] }) => res.files ?? [])
 		.catch((e: Error) => {
 			ElMessage.error(e.message)
 			return []
@@ -117,12 +132,18 @@ watch(currentPath, async (newVal: string[]) => {
 			...item,
 			children: item.isDir ? [] : undefined,
 			parentPath: newVal,
+			loaded: false, // 新加载的文件夹初始未加载子内容
 		}
 		return tree
 	})
 
 	const children = currentFile.value!.children!
 	children.splice(0, children.length, ...newChildren)
+
+	// 标记当前文件夹已加载
+	if (currentFile.value) {
+		currentFile.value.loaded = true
+	}
 
 	loadingFetchChildren.value = false
 })
@@ -197,6 +218,7 @@ const formatDateTime = (dateTime: string) => {
 							:expand-on-click-node="false"
 							@node-click="handleTreeNodeClick"
 							v-loading="loading"
+							ref="treeRef"
 						>
 							<template #default="{ data }">
 								<div class="tree-node">
