@@ -1,21 +1,21 @@
 <script setup lang="ts">
 import api from '/@/api/system/index'
 import { computed, onMounted, ref, watch, nextTick } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useLoading } from '/@/utils/loading-util'
 
 type RemoteFile = {
 	id: number //id
 	name: string //名字
-	createdAt: string //创建时间
+	createAt: string //创建时间
+	updateAt: string //更新时间
 	isDir: boolean //是否是文件夹
 	size: number //大小
-	modTime: string //修改时间
 }
 
 type FileTree = Omit<RemoteFile, 'isDir'> & {
 	children?: FileTree[] //文件夹的children为[]，文件的children为undefined
-	parentPath: string[], //父路径
+	parentPath: string[] //父路径
 	loaded?: boolean //标记文件夹内容是否已加载
 }
 
@@ -62,7 +62,8 @@ const currentFile = computed<FileTree | undefined>({
 			return {
 				id: 0,
 				name: '/',
-				createdAt: '',
+				createAt: '',
+				updateAt: '',
 				modTime: '',
 				size: 0,
 				children: fileTree.value,
@@ -128,13 +129,18 @@ watch(currentPath, async (newVal: string[]) => {
 	}
 
 	loadingFetchChildren.value = true
-	const res: RemoteFile[] = await api.file
+	const res: RemoteFile[] | undefined = await api.file
 		.list(`/${newVal.join('/')}`)
 		.then((res: { files: RemoteFile[] }) => res.files ?? [])
 		.catch((e: Error) => {
 			ElMessage.error(e.message)
-			return []
+			return undefined
 		})
+
+	if (res === undefined) {
+		loadingFetchChildren.value = false
+		return
+	}
 
 	const newChildren: FileTree[] = res.map((item) => {
 		const tree: FileTree = {
@@ -148,7 +154,7 @@ watch(currentPath, async (newVal: string[]) => {
 
 	const children = currentFile.value!.children!
 	children.splice(0, children.length, ...newChildren)
-	
+
 	// 标记当前文件夹已加载
 	if (currentFile.value) {
 		currentFile.value.loaded = true
@@ -185,9 +191,26 @@ const handleBreadcrumbClick = (index: number) => {
 
 // 删除文件/文件夹
 // eslint-disable-next-line no-unused-vars
-const handleDelete = (file: FileTree) => {
-	// TODO: 实现删除功能
-	ElMessage.info('删除功能待实现')
+const handleDelete = async (file: FileTree) => {
+	const status = await ElMessageBox.confirm(`确定要删除 ${file.name} 吗？`, '提示', {
+		confirmButtonText: '确定',
+		cancelButtonText: '取消',
+		type: 'warning',
+	})
+	if (status !== 'confirm') return
+	const res = await api.file.delete(file.id, file.children !== undefined).catch((e: Error) => {
+		ElMessage.error(e.message)
+		return false
+	})
+
+	if (!res) {
+		return
+	}
+	ElMessage.success('删除成功')
+	//删除成功后，重新拉取currentFile的children
+	const nodes = currentFile.value!
+	nodes.loaded = undefined
+	currentPath.value = [...currentPath.value]
 }
 
 // 上传文件
@@ -205,10 +228,6 @@ const formatFileSize = (size: number) => {
 	return parseFloat((size / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
-// 格式化时间
-const formatDateTime = (dateTime: string) => {
-	return new Date(dateTime).toLocaleString('zh-CN')
-}
 </script>
 
 <template>
@@ -234,10 +253,10 @@ const formatDateTime = (dateTime: string) => {
 					<div class="tree-container">
 						<el-tree
 							:data="fileTree"
-							:props="{ 
-								label: 'name', 
+							:props="{
+								label: 'name',
 								children: 'children',
-								isLeaf: (data) => data.children === undefined
+								isLeaf: (data: FileTree) => data.children === undefined
 							}"
 							node-key="id"
 							:expand-on-click-node="false"
@@ -281,7 +300,7 @@ const formatDateTime = (dateTime: string) => {
 					<div class="table-container">
 						<el-table :data="currentFile?.children || []" style="width: 100%" v-loading="loading" empty-text="当前目录为空">
 							<el-table-column label="名称" min-width="200">
-								<template #default="scope">
+								<template #default="scope: {row: FileTree}">
 									<div class="file-item">
 										<el-icon v-if="scope.row.children !== undefined" class="file-icon">
 											<ele-Folder />
@@ -304,20 +323,20 @@ const formatDateTime = (dateTime: string) => {
 							</el-table-column>
 
 							<el-table-column prop="modTime" label="修改时间" width="180" align="center">
-								<template #default="scope">
-									{{ formatDateTime(scope.row.modTime) }}
+								<template #default="scope: {row: FileTree}">
+									{{ scope.row.updateAt }}
 								</template>
 							</el-table-column>
 
 							<el-table-column prop="createdAt" label="创建时间" width="180" align="center">
-								<template #default="scope">
-									{{ formatDateTime(scope.row.createdAt) }}
+								<template #default="scope: {row: FileTree}">
+									{{ scope.row.createAt }}
 								</template>
 							</el-table-column>
 
 							<el-table-column label="操作" width="120" align="center" fixed="right">
 								<template #default="scope">
-									<el-button size="small" text type="danger" @click="handleDelete(scope.row)"> 删除 </el-button>
+									<el-button size="small" text type="danger" @click="handleDelete(scope.row)"> 删除</el-button>
 								</template>
 							</el-table-column>
 						</el-table>

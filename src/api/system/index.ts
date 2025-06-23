@@ -130,7 +130,8 @@ export default {
       form.set('file', data)
 
       return post('/system/file/upload', data)
-    }
+    },
+		delete: (id: number, isDir: boolean) => post('/system/file/del', { id, isDir }),
   },
   oper: {
     getList: (params: object) => get('/system/oper/log/list', params),
