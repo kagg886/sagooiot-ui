@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import api from '/@/api/system/index'
-import {computed, onMounted, ref, watch} from "vue";
+import {computed, nextTick, onMounted, ref, watch} from "vue";
 import {ElMessage} from "element-plus";
 import {useLoading} from "/@/utils/loading-util";
 
 type RemoteFile = {
-  id: number, //id
   name: string, //名字
   createdAt: string, //创建时间
   isDir: boolean, //是否是文件夹
@@ -21,8 +20,7 @@ type FileTree = Omit<RemoteFile, 'isDir'> & {
 //e.g. ['folder1'] 表示 /folder1
 //e.g. ['folder1', 'folder2'] 表示 /folder1/folder2
 //tips：在设计中，该path不应该代表文件
-const currentNode = ref<RemoteFile[]>([])
-const currentPath = computed(() => currentNode.value.map(item => item.name))
+const currentPath = ref<string[]>([])
 
 //文件树
 const fileTree = ref<FileTree[]>([])
@@ -30,7 +28,7 @@ const fileTree = ref<FileTree[]>([])
 //启动时加载根目录文件列表
 const {loading, doLoading} = useLoading(async () => {
   const res: RemoteFile[] = await api.file
-      .list()
+      .list('/')
       .catch((e: Error) => {
         ElMessage.error(e.message)
         return []
@@ -53,7 +51,6 @@ const currentFile = computed<FileTree | undefined>({
     if (currentPath.value.length === 0) {
       // 根目录，返回虚拟根
       return {
-        id: 0,
         name: '/',
         createdAt: '',
         modTime: '',
@@ -101,10 +98,10 @@ const currentFile = computed<FileTree | undefined>({
 
 //监听currentPath的变化，拉取currentFile的children
 const loadingFetchChildren = ref(false)
-watch(currentNode, async (newVal: RemoteFile[]) => {
+watch(currentPath, async (newVal: string[]) => {
   loadingFetchChildren.value = true
   const res: RemoteFile[] = await api.file
-      .list(newVal.at(-1)?.id!)
+      .list(`/${newVal.join('/')}`)
       .catch((e: Error) => {
         ElMessage.error(e.message)
         return []
@@ -126,17 +123,14 @@ watch(currentNode, async (newVal: RemoteFile[]) => {
 
 // 处理文件树节点点击
 const handleTreeNodeClick = async (node: FileTree) => {
-  if (currentNode.value.at(-1)?.name !== node.name) {
-    currentNode.value = [...currentNode.value, {
-      ...node,
-      isDir: true,
-    }]
+  if (currentPath.value.at(-1) !== node.name) {
+    currentPath.value = [...currentPath.value, node.name]
   }
 }
 
 // 处理面包屑导航点击
 const handleBreadcrumbClick = (index: number) => {
-  currentNode.value = currentNode.value.slice(0, index + 1)
+  currentPath.value = currentPath.value.slice(0, index + 1)
 }
 
 // 删除文件/文件夹

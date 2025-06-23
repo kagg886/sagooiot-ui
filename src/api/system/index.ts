@@ -124,7 +124,7 @@ export default {
     clearLog: () => post('/system/login/log/clear'),
   },
   file: {
-    list: (id: number | undefined = undefined) => get('/system/file/list', { id }),
+    list: (path: string) => get('/system/file/list', { path }),
     upload: (data: Blob) => {
       const form = new FormData();
       form.set('file', data)
