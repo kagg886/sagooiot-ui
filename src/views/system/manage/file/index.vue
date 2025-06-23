@@ -27,12 +27,6 @@ const currentPath = ref<string[]>([])
 //文件树
 const fileTree = ref<FileTree[]>([])
 
-// 树组件引用
-const treeRef = ref()
-
-// 展开的节点keys
-const expandedKeys = ref<string[]>([])
-
 //启动时加载根目录文件列表
 const { loading, doLoading } = useLoading(async () => {
 	const res: RemoteFile[] = await api.file
@@ -218,7 +212,6 @@ const formatDateTime = (dateTime: string) => {
 							:expand-on-click-node="false"
 							@node-click="handleTreeNodeClick"
 							v-loading="loading"
-							ref="treeRef"
 						>
 							<template #default="{ data }">
 								<div class="tree-node">
