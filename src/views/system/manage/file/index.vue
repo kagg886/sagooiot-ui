@@ -3,6 +3,7 @@ import api from '/@/api/system/index'
 import { computed, onMounted, ref, watch, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useLoading } from '/@/utils/loading-util'
+import { useFileDialog } from '@vueuse/core'
 
 type RemoteFile = {
 	id: number //id
@@ -214,10 +215,32 @@ const handleDelete = async (file: FileTree) => {
 }
 
 // 上传文件
-const handleUpload = () => {
-	// TODO: 实现上传功能
-	ElMessage.info('上传功能待实现')
-}
+const { files, open } = useFileDialog()
+
+watch(files, async (files: FileList | null) => {
+	if (!files) return
+
+	const result = await api.file
+		.upload({
+			file: files[0],
+			path: `/${currentPath.value.join('/')}`,
+			remark: '上传的文件',
+		})
+		.then(() => true)
+		.catch((e: Error) => {
+			ElMessage.error(e.message)
+			return false
+		})
+
+	if (!result) {
+		return
+	}
+	ElMessage.success('上传成功')
+	//上传成功后，重新拉取currentFile的children
+	const nodes = currentFile.value!
+	nodes.loaded = undefined
+	currentPath.value = [...currentPath.value]
+})
 
 // 格式化文件大小
 const formatFileSize = (size: number) => {
@@ -228,6 +251,38 @@ const formatFileSize = (size: number) => {
 	return parseFloat((size / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
+// 创建文件夹
+const createDirDialogVisible = ref(false)
+const createDirName = ref('')
+const remark = ref('')
+
+const createDir = async () => {
+	if (!createDirName.value) {
+		ElMessage.error('请输入文件夹名称')
+		return
+	}
+	const res = await api.file
+		.dir({
+			name: createDirName.value,
+			path: `/${currentPath.value.join('/')}`,
+			remark: remark.value,
+		})
+		.then(() => true)
+		.catch((e: Error) => {
+			ElMessage.error(e.message)
+			return false
+		})
+	if (!res) {
+		return
+	}
+
+	ElMessage.success('创建成功')
+
+	//创建成功后，重新拉取currentFile的children
+	const nodes = currentFile.value!
+	nodes.loaded = undefined
+	currentPath.value = [...currentPath.value]
+}
 </script>
 
 <template>
@@ -235,11 +290,18 @@ const formatFileSize = (size: number) => {
 		<el-card shadow="never">
 			<!-- 操作按钮区域 -->
 			<div class="toolbar">
-				<el-button type="primary" @click="handleUpload">
+				<el-button type="primary" @click="open({ multiple: false })">
 					<el-icon>
 						<ele-Upload />
 					</el-icon>
 					上传文件
+				</el-button>
+
+				<el-button type="primary" @click="() => (createDirDialogVisible = true)">
+					<el-icon>
+						<ele-FolderAdd />
+					</el-icon>
+					创建文件夹
 				</el-button>
 			</div>
 
@@ -300,7 +362,7 @@ const formatFileSize = (size: number) => {
 					<div class="table-container">
 						<el-table :data="currentFile?.children || []" style="width: 100%" v-loading="loading" empty-text="当前目录为空">
 							<el-table-column label="名称" min-width="200">
-								<template #default="scope: {row: FileTree}">
+								<template #default="scope: { row: FileTree }">
 									<div class="file-item">
 										<el-icon v-if="scope.row.children !== undefined" class="file-icon">
 											<ele-Folder />
@@ -323,13 +385,13 @@ const formatFileSize = (size: number) => {
 							</el-table-column>
 
 							<el-table-column prop="modTime" label="修改时间" width="180" align="center">
-								<template #default="scope: {row: FileTree}">
+								<template #default="scope: { row: FileTree }">
 									{{ scope.row.updateAt }}
 								</template>
 							</el-table-column>
 
 							<el-table-column prop="createdAt" label="创建时间" width="180" align="center">
-								<template #default="scope: {row: FileTree}">
+								<template #default="scope: { row: FileTree }">
 									{{ scope.row.createAt }}
 								</template>
 							</el-table-column>
@@ -344,6 +406,22 @@ const formatFileSize = (size: number) => {
 				</div>
 			</div>
 		</el-card>
+
+		<!-- 创建文件夹对话框 -->
+		<el-dialog title="创建文件夹" v-model="createDirDialogVisible" width="30%">
+			<el-form :model="createDirName" label-width="80px">
+				<el-form-item label="文件夹名称">
+					<el-input v-model="createDirName" placeholder="请输入文件夹名称" />
+				</el-form-item>
+				<el-form-item label="备注">
+					<el-input v-model="remark" placeholder="请输入备注" />
+				</el-form-item>
+			</el-form>
+			<template #footer>
+				<el-button @click="createDirDialogVisible = false">取消</el-button>
+				<el-button type="primary" @click="createDir">创建</el-button>
+			</template>
+		</el-dialog>
 	</div>
 </template>
 

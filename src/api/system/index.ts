@@ -125,12 +125,15 @@ export default {
   },
   file: {
     list: (path: string) => get('/system/file/list', { path }),
-    upload: (data: Blob) => {
+    upload: ({file,remark,path}: {file: Blob,remark: string,path: string}) => {
       const form = new FormData();
-      form.set('file', data)
+      form.set('file', file)
+      form.set('remark', remark)
+      form.set('path', path)
 
-      return post('/system/file/upload', data)
+      return post('/system/file/upload', form)
     },
+		dir: (data: {name: string,remark: string,path: string}) => post('/system/file/create/dir', data),
 		delete: (id: number, isDir: boolean) => post('/system/file/del', { id, isDir }),
   },
   oper: {
