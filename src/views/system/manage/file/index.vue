@@ -268,10 +268,10 @@ const createDir = async () => {
 			remark: remark.value,
 		})
 		.then(() => true)
-		.catch((e: Error) => {
-			ElMessage.error(e.message)
-			return false
-		})
+		.catch(() => false)
+
+
+	createDirDialogVisible.value = false
 	if (!res) {
 		return
 	}
