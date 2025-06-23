@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import api from '/@/api/system/index'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useLoading } from '/@/utils/loading-util'
 
 type RemoteFile = {
+	id: number //id
 	name: string //名字
 	createdAt: string //创建时间
 	isDir: boolean //是否是文件夹
@@ -26,6 +27,9 @@ const currentPath = ref<string[]>([])
 
 //文件树
 const fileTree = ref<FileTree[]>([])
+
+// 树组件引用
+const treeRef = ref()
 
 //启动时加载根目录文件列表
 const { loading, doLoading } = useLoading(async () => {
@@ -56,6 +60,7 @@ const currentFile = computed<FileTree | undefined>({
 		if (currentPath.value.length === 0) {
 			// 根目录，返回虚拟根
 			return {
+				id: 0,
 				name: '/',
 				createdAt: '',
 				modTime: '',
@@ -108,7 +113,17 @@ watch(currentPath, async (newVal: string[]) => {
 	// 检查当前文件夹是否已经加载过内容
 	const currentFileValue = currentFile.value
 	if (currentFileValue && currentFileValue.loaded) {
-		// 如果当前文件夹已经加载过，则不重新加载
+		// 如果当前文件夹已经加载过，则不重新加载，但仍然展开节点
+		await nextTick(() => {
+			if (treeRef.value && currentFileValue && currentFileValue.id) {
+				// 使用节点id来展开
+				treeRef.value.setCurrentKey(currentFileValue.id)
+				const node = treeRef.value.store.nodesMap[currentFileValue.id]
+				if (node) {
+					node.expand()
+				}
+			}
+		})
 		return
 	}
 
@@ -133,13 +148,25 @@ watch(currentPath, async (newVal: string[]) => {
 
 	const children = currentFile.value!.children!
 	children.splice(0, children.length, ...newChildren)
-
+	
 	// 标记当前文件夹已加载
 	if (currentFile.value) {
 		currentFile.value.loaded = true
 	}
 
 	loadingFetchChildren.value = false
+
+	// 自动展开节点
+	await nextTick(() => {
+		if (treeRef.value && currentFile.value && currentFile.value.id) {
+			// 使用节点id来展开
+			treeRef.value.setCurrentKey(currentFile.value.id)
+			const node = treeRef.value.store.nodesMap[currentFile.value.id]
+			if (node) {
+				node.expand()
+			}
+		}
+	})
 })
 
 // 处理文件树节点点击
@@ -207,11 +234,16 @@ const formatDateTime = (dateTime: string) => {
 					<div class="tree-container">
 						<el-tree
 							:data="fileTree"
-							:props="{ label: 'name', children: 'children' }"
-							node-key="name"
+							:props="{ 
+								label: 'name', 
+								children: 'children',
+								isLeaf: (data) => data.children === undefined
+							}"
+							node-key="id"
 							:expand-on-click-node="false"
 							@node-click="handleTreeNodeClick"
 							v-loading="loading"
+							ref="treeRef"
 						>
 							<template #default="{ data }">
 								<div class="tree-node">
