@@ -192,19 +192,23 @@ const handleBreadcrumbClick = (index: number) => {
 }
 
 // 下载
-const handleDownload = async (data: FileTree) => {
+const currentDownloadingId = ref(-1)
+const { loading: downloadLoading, doLoading: startDownload } = useLoading(async (data: FileTree) => {
+	currentDownloadingId.value = data.id
 	const res = await api.file
 		.download(data.id)
 		.catch(() => false)
-		.then((res:any) => downloadFile(res, data.name))
+		.then((res: any) => downloadFile(res, data.name))
 		.then(() => true)
 		.catch(() => false)
+
+	currentDownloadingId.value = -1
 
 	if (!res) {
 		return
 	}
 	ElMessage.success('下载成功')
-}
+})
 
 // 删除文件/文件夹
 const handleDelete = async (file: FileTree) => {
@@ -252,7 +256,9 @@ const { loading: uploadLoading, doLoading: doUploadFile } = useLoading(async (fi
 		.then(() => true)
 		.catch(() => false)
 
+	//资源清理
 	reset()
+	remark.value = ''
 
 	if (!result) {
 		return
@@ -288,7 +294,7 @@ const createDirDialogVisible = ref(false)
 const createDirName = ref('')
 const remark = ref('')
 
-const createDir = async () => {
+const { loading: loadingCreateDir, doLoading: createDir } = useLoading(async () => {
 	if (!createDirName.value) {
 		ElMessage.error('请输入文件夹名称')
 		return
@@ -309,6 +315,9 @@ const createDir = async () => {
 
 	ElMessage.success('创建成功')
 
+	remark.value = ''
+	createDirName.value = ''
+
 	//根目录需要强制刷新
 	if (currentPath.value.length === 0) {
 		await doLoading()
@@ -319,7 +328,7 @@ const createDir = async () => {
 	const nodes = currentFile.value!
 	nodes.loaded = undefined
 	currentPath.value = [...currentPath.value]
-}
+})
 </script>
 
 <template>
@@ -383,13 +392,7 @@ const createDir = async () => {
 					<!-- 面包屑导航 -->
 					<div class="breadcrumb-container">
 						<el-breadcrumb separator="/">
-							<el-breadcrumb-item
-								:to="{ path: '' }"
-								@click="handleBreadcrumbClick(-1)"
-								style="cursor: pointer"
-							>
-								根目录
-							</el-breadcrumb-item>
+							<el-breadcrumb-item :to="{ path: '' }" @click="handleBreadcrumbClick(-1)" style="cursor: pointer"> 根目录 </el-breadcrumb-item>
 
 							<el-breadcrumb-item
 								v-for="(path, index) in currentPath"
@@ -416,7 +419,9 @@ const createDir = async () => {
 											<ele-Document />
 										</el-icon>
 										<span class="file-name" v-if="scope.row.children === undefined">{{ scope.row.name }}</span>
-										<el-link type="primary"  v-else :underline="false" @click="handleTreeNodeClick(scope.row)"> {{ scope.row.name}}</el-link>
+										<el-link type="primary" v-else :underline="false" @click="handleTreeNodeClick(scope.row)">
+											{{ scope.row.name }}
+										</el-link>
 									</div>
 								</template>
 							</el-table-column>
@@ -444,7 +449,16 @@ const createDir = async () => {
 
 							<el-table-column label="操作" width="120" align="center" fixed="right">
 								<template #default="scope: { row: FileTree }">
-									<el-button size="small" text type="primary" @click="handleDownload(scope.row)" :disabled="scope.row.children !== undefined">下载</el-button>
+									<el-button
+										size="small"
+										text
+										type="primary"
+										@click="startDownload(scope.row)"
+										:disabled="scope.row.children !== undefined"
+										:loading="downloadLoading && currentDownloadingId === scope.row.id"
+									>
+										下载
+									</el-button>
 									<el-button size="small" text type="danger" @click="handleDelete(scope.row)"> 删除</el-button>
 								</template>
 							</el-table-column>
@@ -464,7 +478,7 @@ const createDir = async () => {
 
 			<template #footer>
 				<el-button @click="uploadDialogVisible = false">取消</el-button>
-				<el-button type="primary" @click="open">上传</el-button>
+				<el-button type="primary" @click="open" :loading="uploadLoading">上传</el-button>
 			</template>
 		</el-dialog>
 
@@ -480,7 +494,7 @@ const createDir = async () => {
 			</el-form>
 			<template #footer>
 				<el-button @click="createDirDialogVisible = false">取消</el-button>
-				<el-button type="primary" @click="createDir" :loading="uploadLoading">创建</el-button>
+				<el-button type="primary" @click="createDir" :loading="loadingCreateDir">创建</el-button>
 			</template>
 		</el-dialog>
 	</div>
