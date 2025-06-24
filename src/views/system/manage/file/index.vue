@@ -4,6 +4,7 @@ import { computed, onMounted, ref, watch, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useLoading } from '/@/utils/loading-util'
 import { useFileDialog } from '@vueuse/core'
+import downloadFile from '/@/utils/download'
 
 type RemoteFile = {
 	id: number //id
@@ -190,8 +191,22 @@ const handleBreadcrumbClick = (index: number) => {
 	currentPath.value = currentPath.value.slice(0, index + 1)
 }
 
+// 下载
+const handleDownload = async (data: FileTree) => {
+	const res = await api.file
+		.download(data.id)
+		.catch(() => false)
+		.then((res:any) => downloadFile(res, data.name))
+		.then(() => true)
+		.catch(() => false)
+
+	if (!res) {
+		return
+	}
+	ElMessage.success('下载成功')
+}
+
 // 删除文件/文件夹
-// eslint-disable-next-line no-unused-vars
 const handleDelete = async (file: FileTree) => {
 	const status = await ElMessageBox.confirm(`确定要删除 ${file.name} 吗？`, '提示', {
 		confirmButtonText: '确定',
@@ -208,6 +223,13 @@ const handleDelete = async (file: FileTree) => {
 		return
 	}
 	ElMessage.success('删除成功')
+
+	//根目录需要强制刷新
+	if (currentPath.value.length === 0) {
+		await doLoading()
+		return
+	}
+
 	//删除成功后，重新拉取currentFile的children
 	const nodes = currentFile.value!
 	nodes.loaded = undefined
@@ -237,13 +259,20 @@ const { loading: uploadLoading, doLoading: doUploadFile } = useLoading(async (fi
 	}
 	ElMessage.success('上传成功')
 	uploadDialogVisible.value = false
+
+	//根目录需要强制刷新
+	if (currentPath.value.length === 0) {
+		await doLoading()
+		return
+	}
+
 	//上传成功后，重新拉取currentFile的children
 	const nodes = currentFile.value!
 	nodes.loaded = undefined
 	currentPath.value = [...currentPath.value]
 })
 
-watch(files,doUploadFile)
+watch(files, doUploadFile)
 
 // 格式化文件大小
 const formatFileSize = (size: number) => {
@@ -279,6 +308,12 @@ const createDir = async () => {
 	}
 
 	ElMessage.success('创建成功')
+
+	//根目录需要强制刷新
+	if (currentPath.value.length === 0) {
+		await doLoading()
+		return
+	}
 
 	//创建成功后，重新拉取currentFile的children
 	const nodes = currentFile.value!
@@ -325,7 +360,7 @@ const createDir = async () => {
 							node-key="id"
 							:expand-on-click-node="false"
 							@node-click="handleTreeNodeClick"
-							v-loading="loading"
+							v-loading="loading || loadingFetchChildren"
 							ref="treeRef"
 						>
 							<template #default="{ data }">
@@ -349,13 +384,21 @@ const createDir = async () => {
 					<div class="breadcrumb-container">
 						<el-breadcrumb separator="/">
 							<el-breadcrumb-item
+								:to="{ path: '' }"
+								@click="handleBreadcrumbClick(-1)"
+								style="cursor: pointer"
+							>
+								根目录
+							</el-breadcrumb-item>
+
+							<el-breadcrumb-item
 								v-for="(path, index) in currentPath"
 								:key="index"
 								:to="{ path: '' }"
 								@click="handleBreadcrumbClick(index)"
 								style="cursor: pointer"
 							>
-								{{ path === '/' ? '根目录' : path }}
+								{{ path }}
 							</el-breadcrumb-item>
 						</el-breadcrumb>
 					</div>
@@ -372,7 +415,8 @@ const createDir = async () => {
 										<el-icon v-else class="file-icon">
 											<ele-Document />
 										</el-icon>
-										<span class="file-name">{{ scope.row.name }}</span>
+										<span class="file-name" v-if="scope.row.children === undefined">{{ scope.row.name }}</span>
+										<el-link type="primary"  v-else :underline="false" @click="handleTreeNodeClick(scope.row)"> {{ scope.row.name}}</el-link>
 									</div>
 								</template>
 							</el-table-column>
@@ -399,7 +443,8 @@ const createDir = async () => {
 							</el-table-column>
 
 							<el-table-column label="操作" width="120" align="center" fixed="right">
-								<template #default="scope">
+								<template #default="scope: { row: FileTree }">
+									<el-button size="small" text type="primary" @click="handleDownload(scope.row)" :disabled="scope.row.children !== undefined">下载</el-button>
 									<el-button size="small" text type="danger" @click="handleDelete(scope.row)"> 删除</el-button>
 								</template>
 							</el-table-column>

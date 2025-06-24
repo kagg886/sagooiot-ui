@@ -133,6 +133,7 @@ export default {
 
       return post('/system/file/upload', form)
     },
+    download: (id: number) => file('/system/file/download', { id }),
 		dir: (data: {name: string,remark: string,path: string}) => post('/system/file/create/dir', data),
 		delete: (id: number, isDir: boolean) => post('/system/file/del', { id, isDir }),
   },
