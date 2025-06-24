@@ -215,9 +215,10 @@ const handleDelete = async (file: FileTree) => {
 }
 
 // 上传文件
-const { files, open } = useFileDialog()
+const { files, open, reset } = useFileDialog()
+const uploadDialogVisible = ref(false)
 
-watch(files, async (files: FileList | null) => {
+const { loading: uploadLoading, doLoading: doUploadFile } = useLoading(async (files: FileList | null) => {
 	if (!files) return
 
 	const result = await api.file
@@ -227,20 +228,22 @@ watch(files, async (files: FileList | null) => {
 			remark: '上传的文件',
 		})
 		.then(() => true)
-		.catch((e: Error) => {
-			ElMessage.error(e.message)
-			return false
-		})
+		.catch(() => false)
+
+	reset()
 
 	if (!result) {
 		return
 	}
 	ElMessage.success('上传成功')
+	uploadDialogVisible.value = false
 	//上传成功后，重新拉取currentFile的children
 	const nodes = currentFile.value!
 	nodes.loaded = undefined
 	currentPath.value = [...currentPath.value]
 })
+
+watch(files,doUploadFile)
 
 // 格式化文件大小
 const formatFileSize = (size: number) => {
@@ -270,7 +273,6 @@ const createDir = async () => {
 		.then(() => true)
 		.catch(() => false)
 
-
 	createDirDialogVisible.value = false
 	if (!res) {
 		return
@@ -290,7 +292,7 @@ const createDir = async () => {
 		<el-card shadow="never">
 			<!-- 操作按钮区域 -->
 			<div class="toolbar">
-				<el-button type="primary" @click="open({ multiple: false })">
+				<el-button type="primary" @click="() => (uploadDialogVisible = true)">
 					<el-icon>
 						<ele-Upload />
 					</el-icon>
@@ -407,6 +409,20 @@ const createDir = async () => {
 			</div>
 		</el-card>
 
+		<!--		上传文件对话框，不使用el-upload，调用open函数打开对话框-->
+		<el-dialog title="上传文件" v-model="uploadDialogVisible" width="30%">
+			<el-form>
+				<el-form-item label="备注">
+					<el-input v-model="remark" placeholder="请输入备注" />
+				</el-form-item>
+			</el-form>
+
+			<template #footer>
+				<el-button @click="uploadDialogVisible = false">取消</el-button>
+				<el-button type="primary" @click="open">上传</el-button>
+			</template>
+		</el-dialog>
+
 		<!-- 创建文件夹对话框 -->
 		<el-dialog title="创建文件夹" v-model="createDirDialogVisible" width="30%">
 			<el-form :model="createDirName" label-width="80px">
@@ -419,7 +435,7 @@ const createDir = async () => {
 			</el-form>
 			<template #footer>
 				<el-button @click="createDirDialogVisible = false">取消</el-button>
-				<el-button type="primary" @click="createDir">创建</el-button>
+				<el-button type="primary" @click="createDir" :loading="uploadLoading">创建</el-button>
 			</template>
 		</el-dialog>
 	</div>
