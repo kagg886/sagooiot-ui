@@ -450,7 +450,7 @@ const handlePagination = ({page}: {page: number})=> {
 							查看
 						</el-button>
 
-						<el-button size="small" text type="info" @click="startDownload(row)" :loading="downloadingFileIds.has(row.id)">
+						<el-button size="small" text type="success" @click="startDownload(row)" :loading="downloadingFileIds.has(row.id)">
 							<el-icon>
 								<Download />
 							</el-icon>
@@ -545,11 +545,11 @@ const handlePagination = ({page}: {page: number})=> {
 					<el-input v-model="folderForm.name" placeholder="请输入文件夹名称" />
 				</el-form-item>
 				<el-form-item label="备注">
-					<el-input 
-						v-model="folderForm.remark" 
-						type="textarea" 
-						:rows="3" 
-						placeholder="请输入备注" 
+					<el-input
+						v-model="folderForm.remark"
+						type="textarea"
+						:rows="3"
+						placeholder="请输入备注"
 						resize="none"
 					/>
 				</el-form-item>
@@ -567,28 +567,30 @@ const handlePagination = ({page}: {page: number})=> {
 		<el-dialog title="上传文件" v-model="dialogState.uploadFile" width="500px">
 			<el-form :model="uploadForm" label-width="80px">
 				<el-form-item label="选择文件" required>
-					<div class="upload-area">
-						<el-button @click="openFileDialog">
+					<el-button @click="openFileDialog" :disabled="files && files.length > 0">
+						<template v-if="files && files.length > 0">
+							<span class="file-name">{{ files[0].name }}</span>
+							<span class="file-size">({{ formatFileSize(files[0].size) }})</span>
+						</template>
+						<template v-else>
 							<el-icon>
 								<Upload />
 							</el-icon>
 							选择文件
-						</el-button>
-						<div v-if="files && files.length > 0" class="selected-file">
-							<span class="file-name">{{ files[0].name }}</span>
-							<span class="file-size">({{ formatFileSize(files[0].size) }})</span>
-						</div>
-					</div>
+						</template>
+					</el-button>
+
+					<el-button type="danger" @click="resetFileDialog" v-show="files && files.length > 0">删除</el-button>
 				</el-form-item>
 				<el-form-item label="标题">
 					<el-input v-model="uploadForm.title" placeholder="请输入文件标题" />
 				</el-form-item>
 				<el-form-item label="备注">
-					<el-input 
-						v-model="uploadForm.remark" 
-						type="textarea" 
-						:rows="3" 
-						placeholder="请输入备注" 
+					<el-input
+						v-model="uploadForm.remark"
+						type="textarea"
+						:rows="3"
+						placeholder="请输入备注"
 						resize="none"
 					/>
 				</el-form-item>
@@ -630,23 +632,21 @@ const handlePagination = ({page}: {page: number})=> {
 		margin-left: 8px;
 	}
 
-	.upload-area {
-		.selected-file {
-			margin-top: 8px;
-			padding: 8px;
-			background-color: #f5f7fa;
-			border-radius: 4px;
-			border: 1px solid #e4e7ed;
+	.selected-file {
+		margin-top: 8px;
+		padding: 8px;
+		background-color: #f5f7fa;
+		border-radius: 4px;
+		border: 1px solid #e4e7ed;
 
-			.file-name {
-				font-weight: 500;
-			}
+		.file-name {
+			font-weight: 500;
+		}
 
-			.file-size {
-				color: #909399;
-				font-size: 12px;
-				margin-left: 8px;
-			}
+		.file-size {
+			color: #909399;
+			font-size: 12px;
+			margin-left: 8px;
 		}
 	}
 
@@ -654,17 +654,17 @@ const handlePagination = ({page}: {page: number})=> {
 		.el-descriptions {
 			margin-top: 16px;
 		}
-		
+
 		.file-remark {
 			margin-top: 20px;
-			
+
 			h4 {
 				margin: 0 0 8px 0;
 				font-size: 14px;
 				font-weight: 500;
 				color: #303133;
 			}
-			
+
 			.remark-content {
 				padding: 12px;
 				background-color: #f5f7fa;
