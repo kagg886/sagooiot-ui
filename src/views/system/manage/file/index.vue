@@ -325,6 +325,30 @@ const { loading: loadingCreateDir, doLoading: createDir } = useLoading(async () 
 	nodes.loaded = undefined
 	currentPath.value = [...currentPath.value]
 })
+
+//搜索文件
+
+const search = ref('')
+const searchDialog = ref(false)
+const searchResult = ref<RemoteFile[]>([])
+
+const {loading: loadingSearch, doLoading: doSearch} = useLoading(async () => {
+	if (search.value === '') {
+		ElMessage.error('请输入关键字')
+		return
+	}
+	const res = await api.file
+		.search(search.value)
+		.then((res: { files: RemoteFile[] }) => res.files ?? [])
+		.catch(()=> undefined)
+
+	if (res === undefined) {
+		return
+	}
+
+	searchResult.value = res
+	searchDialog.value = true
+})
 </script>
 
 <template>
@@ -346,8 +370,15 @@ const { loading: loadingCreateDir, doLoading: createDir } = useLoading(async () 
 					创建文件夹
 				</el-button>
 
-				<el-input placeholder="搜索文件" style="width: 300px; margin-left: 16px">
+				<el-input placeholder="搜索文件" style="width: 300px; margin-left: 16px" v-model="search" :disabled="loadingSearch">
 					<template #prepend>关键字</template>
+					<template #append>
+						<el-button round size="small" @click="doSearch" :disabled="searchDialog" :loading="loadingSearch">
+							<el-icon v-if="!loadingSearch">
+								<ele-Search/>
+							</el-icon>
+						</el-button>
+					</template>
 				</el-input>
 			</div>
 
@@ -508,6 +539,74 @@ const { loading: loadingCreateDir, doLoading: createDir } = useLoading(async () 
 				<el-button @click="createDirDialogVisible = false">取消</el-button>
 				<el-button type="primary" @click="createDir" :loading="loadingCreateDir">创建</el-button>
 			</template>
+		</el-dialog>
+
+<!--		搜索文件结果对话框-->
+		<el-dialog title="搜索结果" v-model="searchDialog" width="60%">
+			<el-table :data="searchResult" style="width: 100%" v-loading="loading" empty-text="暂无搜索结果">
+				<el-table-column label="名称">
+					<template #default="{row}: { row: FileTree }">
+						<div class="file-item">
+							<el-icon v-if="row.children !== undefined" class="file-icon">
+								<ele-Folder />
+							</el-icon>
+							<el-icon v-else class="file-icon">
+								<ele-Document />
+							</el-icon>
+							<span class="file-name" v-if="row.children === undefined">{{ row.name }}</span>
+							<el-link type="primary" v-else :underline="false" @click="handleTreeNodeClick(row)">
+								{{ row.name }}
+							</el-link>
+						</div>
+					</template>
+				</el-table-column>
+
+				<el-table-column prop="title" label="标题" width="150" align="center">
+					<template #default="scope">
+									<span v-if="scope.row.children === undefined">
+										{{ scope.row.title || '--' }}
+									</span>
+						<span v-else>--</span>
+					</template>
+				</el-table-column>
+
+				<el-table-column prop="remark" label="备注" width="150" align="center">
+					<template #default="scope : {row: FileTree | null}">
+						{{scope.row?.remark || '--'}}
+					</template>
+				</el-table-column>
+
+				<el-table-column prop="size" label="大小" width="120" align="center">
+					<template #default="scope">
+									<span v-if="scope.row.children === undefined">
+										{{ formatFileSize(scope.row.size) }}
+									</span>
+						<span v-else>--</span>
+					</template>
+				</el-table-column>
+
+				<el-table-column prop="modTime" label="修改时间" width="180" align="center">
+					<template #default="scope: { row: FileTree }">
+						{{ scope.row.updateAt }}
+					</template>
+				</el-table-column>
+
+				<el-table-column label="操作" width="120" align="center" fixed="right">
+					<template #default="scope: { row: FileTree }">
+						<el-button
+							size="small"
+							text
+							type="primary"
+							@click="startDownload(scope.row)"
+							:disabled="scope.row.children !== undefined"
+							:loading="downloadLoading && currentDownloadingId === scope.row.id"
+						>
+							下载
+						</el-button>
+						<el-button size="small" text type="danger" @click="handleDelete(scope.row)"> 删除</el-button>
+					</template>
+				</el-table-column>
+			</el-table>
 		</el-dialog>
 	</div>
 </template>
