@@ -9,7 +9,7 @@ import downloadFile from '/@/utils/download'
 type RemoteFile = {
 	id: number //id
 	name: string //名字
-	createAt: string //创建时间
+	// createAt: string //创建时间
 	updateAt: string //更新时间
 	isDir: boolean //是否是文件夹
 	size: number //大小
@@ -195,19 +195,8 @@ const handleBreadcrumbClick = (index: number) => {
 const currentDownloadingId = ref(-1)
 const { loading: downloadLoading, doLoading: startDownload } = useLoading(async (data: FileTree) => {
 	currentDownloadingId.value = data.id
-	const res = await api.file
-		.download(data.id)
-		.catch(() => false)
-		.then((res: any) => downloadFile(res, data.name))
-		.then(() => true)
-		.catch(() => false)
-
+	await api.file.download(data.id).then((res: any) => downloadFile(res, data.name))
 	currentDownloadingId.value = -1
-
-	if (!res) {
-		return
-	}
-	ElMessage.success('下载成功')
 })
 
 // 删除文件/文件夹
@@ -438,12 +427,6 @@ const { loading: loadingCreateDir, doLoading: createDir } = useLoading(async () 
 							<el-table-column prop="modTime" label="修改时间" width="180" align="center">
 								<template #default="scope: { row: FileTree }">
 									{{ scope.row.updateAt }}
-								</template>
-							</el-table-column>
-
-							<el-table-column prop="createdAt" label="创建时间" width="180" align="center">
-								<template #default="scope: { row: FileTree }">
-									{{ scope.row.createAt }}
 								</template>
 							</el-table-column>
 
