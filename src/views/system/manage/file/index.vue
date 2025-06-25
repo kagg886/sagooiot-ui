@@ -13,6 +13,9 @@ type RemoteFile = {
 	updateAt: string //更新时间
 	isDir: boolean //是否是文件夹
 	size: number //大小
+
+	title?: string //标题
+	remark?: string //备注
 }
 
 type FileTree = Omit<RemoteFile, 'isDir'> & {
@@ -232,6 +235,10 @@ const handleDelete = async (file: FileTree) => {
 // 上传文件
 const { files, open, reset } = useFileDialog()
 const uploadDialogVisible = ref(false)
+const uploadForm = ref<{
+	title?: string
+	remark?: string
+}>({})
 
 const { loading: uploadLoading, doLoading: doUploadFile } = useLoading(async (files: FileList | null) => {
 	if (!files) return
@@ -240,14 +247,14 @@ const { loading: uploadLoading, doLoading: doUploadFile } = useLoading(async (fi
 		.upload({
 			file: files[0],
 			path: `/${currentPath.value.join('/')}`,
-			remark: '上传的文件',
+			...uploadForm.value,
 		})
 		.then(() => true)
 		.catch(() => false)
 
 	//资源清理
 	reset()
-	remark.value = ''
+	uploadForm.value = {}
 
 	if (!result) {
 		return
@@ -281,7 +288,7 @@ const formatFileSize = (size: number) => {
 // 创建文件夹
 const createDirDialogVisible = ref(false)
 const createDirName = ref('')
-const remark = ref('')
+const createDirRemark = ref('')
 
 const { loading: loadingCreateDir, doLoading: createDir } = useLoading(async () => {
 	if (!createDirName.value) {
@@ -292,7 +299,7 @@ const { loading: loadingCreateDir, doLoading: createDir } = useLoading(async () 
 		.dir({
 			name: createDirName.value,
 			path: `/${currentPath.value.join('/')}`,
-			remark: remark.value,
+			remark: createDirRemark.value,
 		})
 		.then(() => true)
 		.catch(() => false)
@@ -304,7 +311,7 @@ const { loading: loadingCreateDir, doLoading: createDir } = useLoading(async () 
 
 	ElMessage.success('创建成功')
 
-	remark.value = ''
+	createDirRemark.value = ''
 	createDirName.value = ''
 
 	//根目录需要强制刷新
@@ -338,6 +345,10 @@ const { loading: loadingCreateDir, doLoading: createDir } = useLoading(async () 
 					</el-icon>
 					创建文件夹
 				</el-button>
+
+				<el-input placeholder="搜索文件" style="width: 300px; margin-left: 16px">
+					<template #prepend>关键字</template>
+				</el-input>
 			</div>
 
 			<!-- 主要内容区域 -->
@@ -398,24 +409,39 @@ const { loading: loadingCreateDir, doLoading: createDir } = useLoading(async () 
 					<!-- 文件列表表格 -->
 					<div class="table-container">
 						<el-table :data="currentFile?.children || []" style="width: 100%" v-loading="loading" empty-text="当前目录为空">
-							<el-table-column label="名称" min-width="200">
-								<template #default="scope: { row: FileTree }">
+							<el-table-column label="名称">
+								<template #default="{row}: { row: FileTree }">
 									<div class="file-item">
-										<el-icon v-if="scope.row.children !== undefined" class="file-icon">
+										<el-icon v-if="row.children !== undefined" class="file-icon">
 											<ele-Folder />
 										</el-icon>
 										<el-icon v-else class="file-icon">
 											<ele-Document />
 										</el-icon>
-										<span class="file-name" v-if="scope.row.children === undefined">{{ scope.row.name }}</span>
-										<el-link type="primary" v-else :underline="false" @click="handleTreeNodeClick(scope.row)">
-											{{ scope.row.name }}
+										<span class="file-name" v-if="row.children === undefined">{{ row.name }}</span>
+										<el-link type="primary" v-else :underline="false" @click="handleTreeNodeClick(row)">
+											{{ row.name }}
 										</el-link>
 									</div>
 								</template>
 							</el-table-column>
 
-							<el-table-column prop="size" label="大小" width="120" align="right">
+							<el-table-column prop="title" label="标题" width="150" align="center">
+								<template #default="scope">
+									<span v-if="scope.row.children === undefined">
+										{{ scope.row.title || '--' }}
+									</span>
+									<span v-else>--</span>
+								</template>
+							</el-table-column>
+
+							<el-table-column prop="remark" label="备注" width="150" align="center">
+								<template #default="scope : {row: FileTree | null}">
+									{{scope.row?.remark || '--'}}
+								</template>
+							</el-table-column>
+
+							<el-table-column prop="size" label="大小" width="120" align="center">
 								<template #default="scope">
 									<span v-if="scope.row.children === undefined">
 										{{ formatFileSize(scope.row.size) }}
@@ -453,26 +479,29 @@ const { loading: loadingCreateDir, doLoading: createDir } = useLoading(async () 
 
 		<!--		上传文件对话框，不使用el-upload，调用open函数打开对话框-->
 		<el-dialog title="上传文件" v-model="uploadDialogVisible" width="30%">
-			<el-form>
+			<el-form label-width="100px">
+				<el-form-item label="文件标题">
+					<el-input v-model="uploadForm.title" placeholder="请输入文件标题" />
+				</el-form-item>
 				<el-form-item label="备注">
-					<el-input v-model="remark" placeholder="请输入备注" />
+					<el-input v-model="uploadForm.remark" placeholder="请输入备注" />
 				</el-form-item>
 			</el-form>
 
 			<template #footer>
 				<el-button @click="uploadDialogVisible = false">取消</el-button>
-				<el-button type="primary" @click="open" :loading="uploadLoading">上传</el-button>
+				<el-button type="primary" @click="open" :loading="uploadLoading">开始上传</el-button>
 			</template>
 		</el-dialog>
 
 		<!-- 创建文件夹对话框 -->
 		<el-dialog title="创建文件夹" v-model="createDirDialogVisible" width="30%">
-			<el-form :model="createDirName" label-width="80px">
+			<el-form :model="createDirName" label-width="100px">
 				<el-form-item label="文件夹名称">
 					<el-input v-model="createDirName" placeholder="请输入文件夹名称" />
 				</el-form-item>
 				<el-form-item label="备注">
-					<el-input v-model="remark" placeholder="请输入备注" />
+					<el-input v-model="createDirRemark" placeholder="请输入备注" />
 				</el-form-item>
 			</el-form>
 			<template #footer>

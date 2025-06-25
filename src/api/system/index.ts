@@ -125,11 +125,17 @@ export default {
   },
   file: {
     list: (path: string) => get('/system/file/list', { path }),
-    upload: ({file,remark,path}: {file: Blob,remark: string,path: string}) => {
+    upload: ({file,remark,path}: {file: Blob,path: string,remark?: string,title?:string}) => {
       const form = new FormData();
       form.set('file', file)
-      form.set('remark', remark)
       form.set('path', path)
+
+      if (remark !== undefined) {
+        form.set('remark', remark)
+      }
+      if (remark!== undefined) {
+        form.set('title', remark)
+      }
 
       return post('/system/file/upload', form)
     },
