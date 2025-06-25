@@ -1,731 +1,641 @@
 <script setup lang="ts">
-import api from '/@/api/system/index'
-import { computed, onMounted, ref, watch, nextTick } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { useLoading } from '/@/utils/loading-util'
+import { ref, reactive, onMounted, watch, computed } from 'vue'
+import { ElMessage, ElMessageBox, ElTree } from 'element-plus'
+import { Search, FolderAdd, Upload, View, Delete, Download } from '@element-plus/icons-vue'
 import { useFileDialog } from '@vueuse/core'
+import api from '/@/api/system'
 import downloadFile from '/@/utils/download'
+import { useLoading } from '/@/utils/loading-util'
+import Pagination from '/@/components/pagination/index.vue'
+
+type Dictionary = {
+	id: number
+	name: string
+	childrens: Dictionary[]
+	fullPath: string
+}
 
 type RemoteFile = {
-	id: number //id
-	name: string //名字
-	// createAt: string //创建时间
-	updateAt: string //更新时间
-	isDir: boolean //是否是文件夹
-	size: number //大小
-
-	title?: string //标题
-	remark?: string //备注
-}
-
-type FileTree = Omit<RemoteFile, 'isDir'> & {
-	children?: FileTree[] //文件夹的children为[]，文件的children为undefined
-	parentPath: string[] //父路径
-	loaded?: boolean //标记文件夹内容是否已加载
-}
-
-//当 currentPath为空时，表示根目录
-//e.g. ['folder1'] 表示 /folder1
-//e.g. ['folder1', 'folder2'] 表示 /folder1/folder2
-//tips：在设计中，该path不应该代表文件
-const currentPath = ref<string[]>([])
-
-//文件树
-const fileTree = ref<FileTree[]>([])
-
-// 树组件引用
-const treeRef = ref()
-
-//启动时加载根目录文件列表
-const { loading, doLoading } = useLoading(async () => {
-	const res: RemoteFile[] = await api.file
-		.list('/')
-		.then((res: { files: RemoteFile[] }) => res.files ?? [])
-		.catch((e: Error) => {
-			ElMessage.error(e.message)
-			return []
-		})
-	fileTree.value = res.map((item) => {
-		const tree: FileTree = {
-			...item,
-			children: item.isDir ? [] : undefined,
-			parentPath: [],
-			loaded: false, // 初始未加载子内容
-		}
-		return tree
-	})
-})
-
-onMounted(doLoading)
-
-//获取currentPath(一定是folder)对应的那个FileTree对象
-//未初始化时，会返回undefined
-const currentFile = computed<FileTree | undefined>({
-	get: () => {
-		if (currentPath.value.length === 0) {
-			// 根目录，返回虚拟根
-			return {
-				id: 0,
-				name: '/',
-				createAt: '',
-				updateAt: '',
-				modTime: '',
-				size: 0,
-				children: fileTree.value,
-				parentPath: [],
-				loaded: true, // 根目录始终标记为已加载
-			}
-		}
-
-		//否则按路径一层一层查找
-		let currentLevel = fileTree.value
-		let node: FileTree | undefined
-
-		for (const segment of currentPath.value) {
-			node = currentLevel.find((item) => item.name === segment)
-			if (!node || !node.children) return undefined
-			currentLevel = node.children
-		}
-
-		return node
-	},
-
-	set: (newValue) => {
-		if (!newValue) return
-
-		let currentLevel = fileTree.value
-
-		//查找到倒数第二层。
-		for (let i = 0; i < currentPath.value.length - 1; i++) {
-			const segment = currentPath.value[i]
-			const node = currentLevel.find((item) => item.name === segment)
-			if (!node || !node.children) throw new Error(`file底部不应该有文件，出错的path: /${currentPath.value.slice(0, i).join('/')}`)
-			currentLevel = node.children
-		}
-
-		const targetName = currentPath.value.at(-1)
-		const targetIndex = currentLevel.findIndex((item) => item.name === targetName)
-
-		if (targetIndex !== -1) {
-			//trigger change
-			currentLevel.splice(targetIndex, 1, newValue)
-		}
-	},
-})
-
-//监听currentPath的变化，拉取currentFile的children
-const loadingFetchChildren = ref(false)
-watch(currentPath, async (newVal: string[]) => {
-	// 检查当前文件夹是否已经加载过内容
-	const currentFileValue = currentFile.value
-	if (currentFileValue && currentFileValue.loaded) {
-		// 如果当前文件夹已经加载过，则不重新加载，但仍然展开节点
-		await nextTick(() => {
-			if (treeRef.value && currentFileValue && currentFileValue.id) {
-				// 使用节点id来展开
-				treeRef.value.setCurrentKey(currentFileValue.id)
-				const node = treeRef.value.store.nodesMap[currentFileValue.id]
-				if (node) {
-					node.expand()
-				}
-			}
-		})
-		return
-	}
-
-	loadingFetchChildren.value = true
-	const res: RemoteFile[] | undefined = await api.file
-		.list(`/${newVal.join('/')}`)
-		.then((res: { files: RemoteFile[] }) => res.files ?? [])
-		.catch((e: Error) => {
-			ElMessage.error(e.message)
-			return undefined
-		})
-
-	if (res === undefined) {
-		loadingFetchChildren.value = false
-		return
-	}
-
-	const newChildren: FileTree[] = res.map((item) => {
-		const tree: FileTree = {
-			...item,
-			children: item.isDir ? [] : undefined,
-			parentPath: newVal,
-			loaded: false, // 新加载的文件夹初始未加载子内容
-		}
-		return tree
-	})
-
-	const children = currentFile.value!.children!
-	children.splice(0, children.length, ...newChildren)
-
-	// 标记当前文件夹已加载
-	if (currentFile.value) {
-		currentFile.value.loaded = true
-	}
-
-	loadingFetchChildren.value = false
-
-	// 自动展开节点
-	await nextTick(() => {
-		if (treeRef.value && currentFile.value && currentFile.value.id) {
-			// 使用节点id来展开
-			treeRef.value.setCurrentKey(currentFile.value.id)
-			const node = treeRef.value.store.nodesMap[currentFile.value.id]
-			if (node) {
-				node.expand()
-			}
-		}
-	})
-})
-
-// 处理文件树节点点击
-const handleTreeNodeClick = async (node: FileTree) => {
-	if (node.children === undefined) {
-		//点击文件，不做任何操作
-		return
-	}
-	currentPath.value = [...node.parentPath, node.name]
-}
-
-// 处理面包屑导航点击
-const handleBreadcrumbClick = (index: number) => {
-	currentPath.value = currentPath.value.slice(0, index + 1)
-}
-
-// 下载
-const currentDownloadingId = ref(-1)
-const { loading: downloadLoading, doLoading: startDownload } = useLoading(async (data: FileTree) => {
-	currentDownloadingId.value = data.id
-	await api.file.download(data.id).then((res: any) => downloadFile(res, data.name))
-	currentDownloadingId.value = -1
-})
-
-// 删除文件/文件夹
-const handleDelete = async (file: FileTree) => {
-	const status = await ElMessageBox.confirm(`确定要删除 ${file.name} 吗？`, '提示', {
-		confirmButtonText: '确定',
-		cancelButtonText: '取消',
-		type: 'warning',
-	})
-	if (status !== 'confirm') return
-	const res = await api.file.delete(file.id, file.children !== undefined).catch((e: Error) => {
-		ElMessage.error(e.message)
-		return false
-	})
-
-	if (!res) {
-		return
-	}
-	ElMessage.success('删除成功')
-
-	//根目录需要强制刷新
-	if (currentPath.value.length === 0) {
-		await doLoading()
-		return
-	}
-
-	//删除成功后，重新拉取currentFile的children
-	const nodes = currentFile.value!
-	nodes.loaded = undefined
-	currentPath.value = [...currentPath.value]
-}
-
-// 上传文件
-const { files, open, reset } = useFileDialog()
-const uploadDialogVisible = ref(false)
-const uploadForm = ref<{
+	id: number
+	name: string
 	title?: string
 	remark?: string
-}>({})
+	size: number
+	updatedAt: string
+}
 
-const { loading: uploadLoading, doLoading: doUploadFile } = useLoading(async (files: FileList | null) => {
-	if (!files) return
+// 响应式数据
+const treeRef = ref<InstanceType<typeof ElTree>>()
+const filterText = ref('')
+const isSearchMode = ref(false)
 
-	const result = await api.file
-		.upload({
-			file: files[0],
-			path: `/${currentPath.value.join('/')}`,
-			...uploadForm.value,
-		})
-		.then(() => true)
-		.catch(() => false)
+// 目录树数据
+const treeData = ref<Dictionary[]>([])
+const treeProps = {
+	children: 'childrens',
+	label: 'name'
+}
 
-	//资源清理
-	reset()
-	uploadForm.value = {}
+// 当前选中的路径
+const currentPath = ref('/')
 
-	if (!result) {
-		return
+// 文件列表数据
+const fileList = reactive({
+	data: [] as RemoteFile[],
+	total: 0,
+	param: {
+		path: '/',
+		pageNum: 1,
+		pageSize: 10
 	}
-	ElMessage.success('上传成功')
-	uploadDialogVisible.value = false
-
-	//根目录需要强制刷新
-	if (currentPath.value.length === 0) {
-		await doLoading()
-		return
-	}
-
-	//上传成功后，重新拉取currentFile的children
-	const nodes = currentFile.value!
-	nodes.loaded = undefined
-	currentPath.value = [...currentPath.value]
 })
 
-watch(files, doUploadFile)
+// 搜索数据
+const searchData = reactive({
+	query: '',
+	pageNum: 1,
+	pageSize: 10
+})
+
+const pageNum = computed({
+	get() {
+		return isSearchMode.value === true ? searchData.pageNum : fileList.param.pageNum
+	},
+	set(newVal) {
+		if (isSearchMode.value) {
+			searchData.pageNum = newVal
+		} else {
+			fileList.param.pageNum = newVal
+		}
+	}
+})
+
+const pageSize = computed({
+	get() {
+		return isSearchMode.value === true? searchData.pageSize : fileList.param.pageSize
+	},
+	set(newVal) {
+		if (isSearchMode.value) {
+			searchData.pageSize = newVal
+		} else {
+			fileList.param.pageSize = newVal
+		}
+	}
+})
+
+// 对话框状态
+const dialogState = reactive({
+	fileDetail: false,
+	createFolder: false,
+	uploadFile: false,
+	selectedFile: null as RemoteFile | null
+})
+
+// 创建文件夹表单
+const folderForm = reactive({
+	name: '',
+	remark: '',
+	path: ''
+})
+
+// 上传文件表单
+const uploadForm = reactive({
+	remark: '',
+	title: '',
+	path: ''
+})
+
+// 文件对话框
+const { files, open: openFileDialog, reset: resetFileDialog } = useFileDialog({
+	accept: '*/*',
+	multiple: false
+})
 
 // 格式化文件大小
 const formatFileSize = (size: number) => {
 	if (size === 0) return '0 B'
 	const k = 1024
-	const sizes = ['B', 'KB', 'MB', 'GB']
+	const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
 	const i = Math.floor(Math.log(size) / Math.log(k))
 	return parseFloat((size / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
-// 创建文件夹
-const createDirDialogVisible = ref(false)
-const createDirName = ref('')
-const createDirRemark = ref('')
+// 获取文件显示名称
+const getFileName = (file: RemoteFile) => {
+	return file.title || file.name
+}
 
-const { loading: loadingCreateDir, doLoading: createDir } = useLoading(async () => {
-	if (!createDirName.value) {
-		ElMessage.error('请输入文件夹名称')
-		return
+// 限制备注显示长度
+const limitRemark = (remark: string, maxLength = 30) => {
+	if (!remark) return '-'
+	return remark.length > maxLength ? remark.substring(0, maxLength) + '...' : remark
+}
+
+// 加载目录树
+const loadTreeData = async () => {
+	try {
+		const res = await api.file.tree()
+		treeData.value = res.dirs
+	} catch (error) {
+		ElMessage.error('加载目录树失败')
 	}
-	const res = await api.file
-		.dir({
-			name: createDirName.value,
-			path: `/${currentPath.value.join('/')}`,
-			remark: createDirRemark.value,
-		})
-		.then(() => true)
-		.catch(() => false)
+}
 
-	createDirDialogVisible.value = false
-	if (!res) {
-		return
-	}
+// 加载文件列表
+const { loading: fileListLoading, doLoading: doLoadFileList } = useLoading(async () => {
+	if (isSearchMode.value) return
 
-	ElMessage.success('创建成功')
-
-	createDirRemark.value = ''
-	createDirName.value = ''
-
-	//根目录需要强制刷新
-	if (currentPath.value.length === 0) {
-		await doLoading()
-		return
-	}
-
-	//创建成功后，重新拉取currentFile的children
-	const nodes = currentFile.value!
-	nodes.loaded = undefined
-	currentPath.value = [...currentPath.value]
+	const res = await api.file.list(fileList.param)
+	fileList.data = res.list
+	fileList.total = res.total
 })
 
-//搜索文件
+const loadFileList = async () => {
+	try {
+		await doLoadFileList()
+	} catch (error) {
+		ElMessage.error('加载文件列表失败')
+	}
+}
 
-const search = ref('')
-const searchDialog = ref(false)
-const searchResult = ref<RemoteFile[]>([])
+// 搜索文件
+const { loading: searchLoading, doLoading: doSearchFiles } = useLoading(async () => {
+	const res = await api.file.search(searchData)
+	fileList.data = res.list
+	fileList.total = res.total
+})
 
-const {loading: loadingSearch, doLoading: doSearch} = useLoading(async () => {
-	if (search.value === '') {
-		ElMessage.error('请输入关键字')
+const searchFiles = async () => {
+	if (!searchData.query.trim()) {
+		ElMessage.warning('请输入搜索关键词')
 		return
 	}
-	const res = await api.file
-		.search(search.value)
-		.then((res: { files: RemoteFile[] }) => res.files ?? [])
-		.catch(()=> undefined)
 
-	if (res === undefined) {
+	isSearchMode.value = true
+	try {
+		await doSearchFiles()
+	} catch (error) {
+		ElMessage.error('搜索文件失败')
+	}
+}
+
+// 清空搜索
+const clearSearch = () => {
+	searchData.query = ''
+	searchData.pageNum = 1
+	isSearchMode.value = false
+	loadFileList()
+}
+
+// 处理树节点点击
+const handleNodeClick = (data: Dictionary) => {
+	if (isSearchMode.value) {
+		clearSearch()
+	}
+	currentPath.value = data.name === 'root' ? '/' : data.fullPath
+	fileList.param.path = currentPath.value
+	fileList.param.pageNum = 1
+	loadFileList()
+}
+
+// 树过滤方法
+const filterNode = (value: string, data: Dictionary) => {
+	if (!value) return true
+	return data.name.toLowerCase().includes(value.toLowerCase())
+}
+
+// 查看文件详情
+const viewFileDetail = (file: RemoteFile) => {
+	dialogState.selectedFile = file
+	dialogState.fileDetail = true
+}
+
+// 下载文件
+const downloadingFileIds = ref<Set<number>>(new Set())
+
+const startDownload = async (file: RemoteFile) => {
+	if (downloadingFileIds.value.has(file.id)) return
+
+	downloadingFileIds.value.add(file.id)
+	try {
+		const data = await api.file.download(file.id)
+		downloadFile(data, file.name)
+	} catch (error) {
+		ElMessage.error('下载文件失败')
+	} finally {
+		downloadingFileIds.value.delete(file.id)
+	}
+}
+
+// 删除文件
+const deletingFileIds = ref<Set<number>>(new Set())
+
+const deleteFile = (file: RemoteFile) => {
+	if (deletingFileIds.value.has(file.id)) return
+
+	const isDirectory = file.size === 0 // 假设目录大小为0
+	ElMessageBox.confirm(
+		`确定要删除${isDirectory ? '文件夹' : '文件'} "${getFileName(file)}" 吗？`,
+		'确认删除',
+		{
+			confirmButtonText: '确定',
+			cancelButtonText: '取消',
+			type: 'warning'
+		}
+	).then(async () => {
+		deletingFileIds.value.add(file.id)
+		try {
+			await api.file.deleteFile(file.id, isDirectory)
+			ElMessage.success('删除成功')
+			if (isSearchMode.value) {
+				searchFiles()
+			} else {
+				loadFileList()
+			}
+		} catch (error) {
+			ElMessage.error('删除失败')
+		} finally {
+			deletingFileIds.value.delete(file.id)
+		}
+	})
+}
+
+// 打开创建文件夹对话框
+const openCreateFolderDialog = () => {
+	folderForm.name = ''
+	folderForm.remark = ''
+	folderForm.path = currentPath.value
+	dialogState.createFolder = true
+}
+
+// 创建文件夹
+const { loading: createFolderLoading, doLoading: doCreateFolder } = useLoading(async () => {
+	await api.file.createDir(folderForm)
+	ElMessage.success('创建文件夹成功')
+	dialogState.createFolder = false
+
+	await Promise.all(
+		[
+			loadTreeData(),
+			loadFileList()
+		]
+	)
+})
+
+const createFolder = async () => {
+	if (!folderForm.name.trim()) {
+		ElMessage.warning('请输入文件夹名称')
 		return
 	}
 
-	searchResult.value = res
-	searchDialog.value = true
+	try {
+		await doCreateFolder()
+	} catch (error) {
+		ElMessage.error('创建文件夹失败')
+	}
+}
+
+// 打开上传文件对话框
+const openUploadDialog = () => {
+	uploadForm.remark = ''
+	uploadForm.title = ''
+	uploadForm.path = currentPath.value
+	resetFileDialog()
+	dialogState.uploadFile = true
+}
+
+
+// 上传文件
+const { loading: uploadFileLoading, doLoading: doUploadFile } = useLoading(async () => {
+	const file = files.value![0]
+	await api.file.upload({
+		file: file,
+		path: uploadForm.path,
+		remark: uploadForm.remark,
+		title: uploadForm.title
+	})
+	ElMessage.success('上传文件成功')
+	dialogState.uploadFile = false
+	loadFileList()
+})
+
+const uploadFile = async () => {
+	if (!files.value || files.value.length === 0) {
+		ElMessage.warning('请选择要上传的文件')
+		return
+	}
+
+	try {
+		await doUploadFile()
+	} catch (error) {
+		ElMessage.error('上传文件失败')
+	}
+}
+
+// 监听过滤文本变化
+watch(filterText, (val) => {
+	treeRef.value?.filter(val)
+})
+
+// 组件挂载时初始化
+onMounted(() => {
+	loadTreeData()
+	loadFileList()
 })
 </script>
 
 <template>
-	<div class="file-manager-container">
-		<el-card shadow="never">
-			<!-- 操作按钮区域 -->
-			<div class="toolbar">
-				<el-button type="primary" @click="() => (uploadDialogVisible = true)">
-					<el-icon>
-						<ele-Upload />
-					</el-icon>
-					上传文件
-				</el-button>
-
-				<el-button type="primary" @click="() => (createDirDialogVisible = true)">
-					<el-icon>
-						<ele-FolderAdd />
-					</el-icon>
-					创建文件夹
-				</el-button>
-
-				<el-input placeholder="搜索文件" style="width: 300px; margin-left: 16px" v-model="search" :disabled="loadingSearch">
-					<template #prepend>关键字</template>
-					<template #append>
-						<el-button round size="small" @click="doSearch" :disabled="searchDialog" :loading="loadingSearch">
-							<el-icon v-if="!loadingSearch">
-								<ele-Search/>
-							</el-icon>
-						</el-button>
+	<div class="page flex-row gap-4">
+		<!-- 左侧目录树 -->
+		<el-card shadow="never" style="width: 260px">
+			<el-scrollbar>
+				<el-input
+					:prefix-icon="Search"
+					v-model="filterText"
+					placeholder="请输入目录名称"
+					clearable
+					style="width: 100%;"
+				/>
+				<el-tree
+					ref="treeRef"
+					class="filter-tree mt-4"
+					:data="treeData"
+					:props="treeProps"
+					default-expand-all
+					:filter-node-method="filterNode"
+					@node-click="handleNodeClick"
+				>
+					<template #default="{ node }">
+						<div class="custom-tree-node" :title="node.label">
+							{{ node.label }}
+						</div>
 					</template>
-				</el-input>
-			</div>
-
-			<!-- 主要内容区域 -->
-			<div class="content-area">
-				<!-- 左侧文件树 -->
-				<div class="file-tree-panel">
-					<div class="panel-header">
-						<h3>文件目录</h3>
-					</div>
-					<div class="tree-container">
-						<el-tree
-							:data="fileTree"
-							:props="{
-								label: 'name',
-								children: 'children',
-								isLeaf: (data: FileTree) => data.children === undefined
-							}"
-							node-key="id"
-							:expand-on-click-node="false"
-							@node-click="handleTreeNodeClick"
-							v-loading="loading || loadingFetchChildren"
-							ref="treeRef"
-						>
-							<template #default="{ data }">
-								<div class="tree-node">
-									<el-icon v-if="data.children !== undefined" class="tree-icon">
-										<ele-Folder />
-									</el-icon>
-									<el-icon v-else class="tree-icon">
-										<ele-Document />
-									</el-icon>
-									<span class="tree-label">{{ data.name }}</span>
-								</div>
-							</template>
-						</el-tree>
-					</div>
-				</div>
-
-				<!-- 右侧文件列表 -->
-				<div class="file-list-panel">
-					<!-- 面包屑导航 -->
-					<div class="breadcrumb-container">
-						<el-breadcrumb separator="/">
-							<el-breadcrumb-item :to="{ path: '' }" @click="handleBreadcrumbClick(-1)" style="cursor: pointer"> 根目录 </el-breadcrumb-item>
-
-							<el-breadcrumb-item
-								v-for="(path, index) in currentPath"
-								:key="index"
-								:to="{ path: '' }"
-								@click="handleBreadcrumbClick(index)"
-								style="cursor: pointer"
-							>
-								{{ path }}
-							</el-breadcrumb-item>
-						</el-breadcrumb>
-					</div>
-
-					<!-- 文件列表表格 -->
-					<div class="table-container">
-						<el-table :data="currentFile?.children || []" style="width: 100%" v-loading="loading" empty-text="当前目录为空">
-							<el-table-column label="名称">
-								<template #default="{row}: { row: FileTree }">
-									<div class="file-item">
-										<el-icon v-if="row.children !== undefined" class="file-icon">
-											<ele-Folder />
-										</el-icon>
-										<el-icon v-else class="file-icon">
-											<ele-Document />
-										</el-icon>
-										<span class="file-name" v-if="row.children === undefined">{{ row.name }}</span>
-										<el-link type="primary" v-else :underline="false" @click="handleTreeNodeClick(row)">
-											{{ row.name }}
-										</el-link>
-									</div>
-								</template>
-							</el-table-column>
-
-							<el-table-column prop="title" label="标题" width="150" align="center">
-								<template #default="scope">
-									<span v-if="scope.row.children === undefined">
-										{{ scope.row.title || '--' }}
-									</span>
-									<span v-else>--</span>
-								</template>
-							</el-table-column>
-
-							<el-table-column prop="remark" label="备注" width="150" align="center">
-								<template #default="scope : {row: FileTree | null}">
-									{{scope.row?.remark || '--'}}
-								</template>
-							</el-table-column>
-
-							<el-table-column prop="size" label="大小" width="120" align="center">
-								<template #default="scope">
-									<span v-if="scope.row.children === undefined">
-										{{ formatFileSize(scope.row.size) }}
-									</span>
-									<span v-else>--</span>
-								</template>
-							</el-table-column>
-
-							<el-table-column prop="modTime" label="修改时间" width="180" align="center">
-								<template #default="scope: { row: FileTree }">
-									{{ scope.row.updateAt }}
-								</template>
-							</el-table-column>
-
-							<el-table-column label="操作" width="120" align="center" fixed="right">
-								<template #default="scope: { row: FileTree }">
-									<el-button
-										size="small"
-										text
-										type="primary"
-										@click="startDownload(scope.row)"
-										:disabled="scope.row.children !== undefined"
-										:loading="downloadLoading && currentDownloadingId === scope.row.id"
-									>
-										下载
-									</el-button>
-									<el-button size="small" text type="danger" @click="handleDelete(scope.row)"> 删除</el-button>
-								</template>
-							</el-table-column>
-						</el-table>
-					</div>
-				</div>
-			</div>
+				</el-tree>
+			</el-scrollbar>
 		</el-card>
 
-		<!--		上传文件对话框，不使用el-upload，调用open函数打开对话框-->
-		<el-dialog title="上传文件" v-model="uploadDialogVisible" width="30%">
-			<el-form label-width="100px">
-				<el-form-item label="文件标题">
+		<!-- 右侧文件列表 -->
+		<el-card shadow="never" class="flex1">
+			<!-- 搜索和操作栏 -->
+			<el-form inline class="mb-4">
+				<el-form-item>
+					<el-input
+						v-model="searchData.query"
+						placeholder="搜索文件..."
+						clearable
+						style="width: 200px"
+						@keyup.enter="searchFiles"
+						@clear="clearSearch"
+					>
+						<template #append>
+							<el-button @click="searchFiles" :loading="searchLoading">
+								<el-icon><Search /></el-icon>
+							</el-button>
+						</template>
+					</el-input>
+				</el-form-item>
+				<el-form-item>
+					<el-button type="primary" @click="openCreateFolderDialog">
+						<el-icon><FolderAdd /></el-icon>
+						创建文件夹
+					</el-button>
+				</el-form-item>
+				<el-form-item>
+					<el-button type="success" @click="openUploadDialog">
+						<el-icon><Upload /></el-icon>
+						上传文件
+					</el-button>
+				</el-form-item>
+			</el-form>
+
+			<!-- 当前路径显示 -->
+			<div class="mb-4" v-if="!isSearchMode">
+				<span class="current-path">当前位置：{{ currentPath }}</span>
+			</div>
+			<div class="mb-4" v-else>
+				<span class="search-result">搜索结果：{{ searchData.query }}</span>
+				<el-button type="text" @click="clearSearch" class="ml-2">返回文件列表</el-button>
+			</div>
+
+			<!-- 文件列表表格 -->
+			<el-table :data="fileList.data" style="width: 100%" v-loading="fileListLoading || searchLoading">
+				<el-table-column type="index" label="序号" width="60" align="center" />
+				<el-table-column prop="name" label="文件名" min-width="200" show-overflow-tooltip>
+					<template #default="{ row }">
+						{{ getFileName(row) }}
+					</template>
+				</el-table-column>
+				<el-table-column prop="remark" label="备注" min-width="150" show-overflow-tooltip>
+					<template #default="{ row }">
+						{{ limitRemark(row.remark) }}
+					</template>
+				</el-table-column>
+				<el-table-column prop="size" label="大小" width="100" align="center">
+					<template #default="{ row }">
+						{{ formatFileSize(row.size) }}
+					</template>
+				</el-table-column>
+				<el-table-column prop="updatedAt" label="更新时间" width="180" align="center" />
+				<el-table-column label="操作" width="200" align="center">
+					<template #default="{ row }">
+						<el-button size="small" text type="primary" @click="viewFileDetail(row)">
+							<el-icon><View /></el-icon>
+							查看
+						</el-button>
+
+						<el-button size="small" text type="info" @click="startDownload(row)" :loading="downloadingFileIds.has(row.id)">
+							<el-icon><Download /></el-icon>
+							下载
+						</el-button>
+
+						<el-button size="small" text type="danger" @click="deleteFile(row)" :loading="deletingFileIds.has(row.id)">
+							<el-icon><Delete /></el-icon>
+							删除
+						</el-button>
+					</template>
+				</el-table-column>
+			</el-table>
+
+<!--			readonly total: NumberConstructor;-->
+<!--			readonly pageSize: NumberConstructor;-->
+<!--			readonly defaultPageSize: NumberConstructor;-->
+<!--			readonly currentPage: NumberConstructor;-->
+<!--			readonly defaultCurrentPage: NumberConstructor;-->
+<!--			readonly pageCount: NumberConstructor;-->
+<!--			readonly pagerCount: import("element-plus/es/utils").EpPropFinalized<NumberConstructor, unknown, unknown, 7, boolean>;-->
+<!--			readonly layout: import("element-plus/es/utils").EpPropFinalized<StringConstructor, unknown, unknown, string, boolean>;-->
+<!--			readonly pageSizes: import("element-plus/es/utils").EpPropFinalized<(new (...args: any[]) => number[]) | (() => number[]) | ((new (...args: any[]) => number[]) | (() => number[]))[], unknown, unknown, () => [10, 20, 30, 40, 50, 100], boolean>;-->
+<!--			readonly popperClass: import("element-plus/es/utils").EpPropFinalized<StringConstructor, unknown, unknown, "", boolean>;-->
+<!--			readonly prevText: import("element-plus/es/utils").EpPropFinalized<StringConstructor, unknown, unknown, "", boolean>;-->
+<!--			readonly prevIcon: import("element-plus/es/utils").EpPropFinalized<(new (...args: any[]) => (string | import("vue").Component<any, any, any, import("vue").ComputedOptions, import("vue").MethodOptions>) & {}) | (() => string | import("vue").Component<any, any, any, import("vue").ComputedOptions, import("vue").MethodOptions>) | ((new (...args: any[]) => (string | import("vue").Component<any, any, any, import("vue").ComputedOptions, import("vue").MethodOptions>) & {}) | (() => string | import("vue").Component<any, any, any, import("vue").ComputedOptions, import("vue").MethodOptions>))[], unknown, unknown, () => import("vue").DefineComponent<{}, {}, {}, import("vue").ComputedOptions, import("vue").MethodOptions, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, {}, string, import("vue").VNodeProps & import("vue").AllowedComponentProps & import("vue").ComponentCustomProps, Readonly<import("vue").ExtractPropTypes<{}>>, {}>, boolean>;-->
+<!--			readonly nextText: import("element-plus/es/utils").EpPropFinalized<StringConstructor, unknown, unknown, "", boolean>;-->
+<!--			readonly nextIcon: import("element-plus/es/utils").EpPropFinalized<(new (...args: any[]) => (string | import("vue").Component<any, any, any, import("vue").ComputedOptions, import("vue").MethodOptions>) & {}) | (() => string | import("vue").Component<any, any, any, import("vue").ComputedOptions, import("vue").MethodOptions>) | ((new (...args: any[]) => (string | import("vue").Component<any, any, any, import("vue").ComputedOptions, import("vue").MethodOptions>) & {}) | (() => string | import("vue").Component<any, any, any, import("vue").ComputedOptions, import("vue").MethodOptions>))[], unknown, unknown, () => import("vue").DefineComponent<{}, {}, {}, import("vue").ComputedOptions, import("vue").MethodOptions, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, {}, string, import("vue").VNodeProps & import("vue").AllowedComponentProps & import("vue").ComponentCustomProps, Readonly<import("vue").ExtractPropTypes<{}>>, {}>, boolean>;-->
+<!--			readonly small: BooleanConstructor;-->
+<!--			readonly background: BooleanConstructor;-->
+<!--			readonly disabled: BooleanConstructor;-->
+<!--			readonly hideOnSinglePage: BooleanConstructor;-->
+<!--			<pagination v-show="tableData.total > 0" :total="tableData.total" v-model:page="tableData.param.pageNum" v-model:limit="tableData.param.pageSize" @pagination="userList" />-->
+			<pagination
+				v-show="fileList.total > 0"
+				:total="fileList.total"
+				v-model:page="pageNum"
+				v-model:limit="pageSize"
+			/>
+			<!--			<el-pagination-->
+<!--				:total="fileList.total"-->
+<!--				:page-size="fileList.param.pageSize"-->
+<!--				:current-page="fileList.param.pageNum"-->
+<!--				@current-change="(page: number) => fileList.param.pageNum = page"-->
+<!--				@size-change="(size: number) => fileList.param.pageSize = size"-->
+<!--			>-->
+<!--			</el-pagination>-->
+
+<!--			&lt;!&ndash; 分页 &ndash;&gt;-->
+<!--			<pagination-->
+<!--				v-show="fileList.total > 0"-->
+<!--				:total="fileList.total"-->
+<!--				v-model:page="currentFileList.pageNum"-->
+<!--				v-model:limit="currentFileList.pageSize"-->
+<!--				@pagination="handlePagination"-->
+<!--			/>-->
+		</el-card>
+
+		<!-- 文件详情对话框 -->
+		<el-dialog
+			title="文件详情"
+			v-model="dialogState.fileDetail"
+			width="500px"
+		>
+			<div v-if="dialogState.selectedFile" class="file-detail">
+				<el-descriptions :column="1" border>
+					<el-descriptions-item label="文件名">
+						{{ dialogState.selectedFile.name }}
+					</el-descriptions-item>
+					<el-descriptions-item label="标题" v-if="dialogState.selectedFile.title">
+						{{ dialogState.selectedFile.title }}
+					</el-descriptions-item>
+					<el-descriptions-item label="备注" v-if="dialogState.selectedFile.remark">
+						{{ dialogState.selectedFile.remark }}
+					</el-descriptions-item>
+					<el-descriptions-item label="大小">
+						{{ formatFileSize(dialogState.selectedFile.size) }}
+					</el-descriptions-item>
+					<el-descriptions-item label="更新时间">
+						{{ dialogState.selectedFile.updatedAt }}
+					</el-descriptions-item>
+				</el-descriptions>
+			</div>
+		</el-dialog>
+
+		<!-- 创建文件夹对话框 -->
+		<el-dialog
+			title="创建文件夹"
+			v-model="dialogState.createFolder"
+			width="500px"
+		>
+			<el-form :model="folderForm" label-width="80px">
+				<el-form-item label="名称" required>
+					<el-input v-model="folderForm.name" placeholder="请输入文件夹名称" />
+				</el-form-item>
+				<el-form-item label="备注">
+					<el-input v-model="folderForm.remark" placeholder="请输入备注" />
+				</el-form-item>
+				<el-form-item label="父目录">
+					<el-input v-model="folderForm.path" readonly />
+				</el-form-item>
+			</el-form>
+			<template #footer>
+				<el-button @click="dialogState.createFolder = false">取消</el-button>
+				<el-button type="primary" @click="createFolder" :loading="createFolderLoading">确定</el-button>
+			</template>
+		</el-dialog>
+
+		<!-- 上传文件对话框 -->
+		<el-dialog
+			title="上传文件"
+			v-model="dialogState.uploadFile"
+			width="500px"
+		>
+			<el-form :model="uploadForm" label-width="80px">
+				<el-form-item label="选择文件" required>
+					<div class="upload-area">
+						<el-button @click="openFileDialog">
+							<el-icon><Upload /></el-icon>
+							选择文件
+						</el-button>
+						<div v-if="files && files.length > 0" class="selected-file">
+							<span class="file-name">{{ files[0].name }}</span>
+							<span class="file-size">({{ formatFileSize(files[0].size) }})</span>
+						</div>
+					</div>
+				</el-form-item>
+				<el-form-item label="标题">
 					<el-input v-model="uploadForm.title" placeholder="请输入文件标题" />
 				</el-form-item>
 				<el-form-item label="备注">
 					<el-input v-model="uploadForm.remark" placeholder="请输入备注" />
 				</el-form-item>
-			</el-form>
-
-			<template #footer>
-				<el-button @click="uploadDialogVisible = false">取消</el-button>
-				<el-button type="primary" @click="open" :loading="uploadLoading">开始上传</el-button>
-			</template>
-		</el-dialog>
-
-		<!-- 创建文件夹对话框 -->
-		<el-dialog title="创建文件夹" v-model="createDirDialogVisible" width="30%">
-			<el-form :model="createDirName" label-width="100px">
-				<el-form-item label="文件夹名称">
-					<el-input v-model="createDirName" placeholder="请输入文件夹名称" />
-				</el-form-item>
-				<el-form-item label="备注">
-					<el-input v-model="createDirRemark" placeholder="请输入备注" />
+				<el-form-item label="上传到">
+					<el-input v-model="uploadForm.path" readonly />
 				</el-form-item>
 			</el-form>
 			<template #footer>
-				<el-button @click="createDirDialogVisible = false">取消</el-button>
-				<el-button type="primary" @click="createDir" :loading="loadingCreateDir">创建</el-button>
+				<el-button @click="dialogState.uploadFile = false">取消</el-button>
+				<el-button type="primary" @click="uploadFile" :loading="uploadFileLoading">上传</el-button>
 			</template>
-		</el-dialog>
-
-<!--		搜索文件结果对话框-->
-		<el-dialog title="搜索结果" v-model="searchDialog" width="60%">
-			<el-table :data="searchResult" style="width: 100%" v-loading="loading" empty-text="暂无搜索结果">
-				<el-table-column label="名称">
-					<template #default="{row}: { row: FileTree }">
-						<div class="file-item">
-							<el-icon v-if="row.children !== undefined" class="file-icon">
-								<ele-Folder />
-							</el-icon>
-							<el-icon v-else class="file-icon">
-								<ele-Document />
-							</el-icon>
-							<span class="file-name" v-if="row.children === undefined">{{ row.name }}</span>
-							<el-link type="primary" v-else :underline="false" @click="handleTreeNodeClick(row)">
-								{{ row.name }}
-							</el-link>
-						</div>
-					</template>
-				</el-table-column>
-
-				<el-table-column prop="title" label="标题" width="150" align="center">
-					<template #default="scope">
-									<span v-if="scope.row.children === undefined">
-										{{ scope.row.title || '--' }}
-									</span>
-						<span v-else>--</span>
-					</template>
-				</el-table-column>
-
-				<el-table-column prop="remark" label="备注" width="150" align="center">
-					<template #default="scope : {row: FileTree | null}">
-						{{scope.row?.remark || '--'}}
-					</template>
-				</el-table-column>
-
-				<el-table-column prop="size" label="大小" width="120" align="center">
-					<template #default="scope">
-									<span v-if="scope.row.children === undefined">
-										{{ formatFileSize(scope.row.size) }}
-									</span>
-						<span v-else>--</span>
-					</template>
-				</el-table-column>
-
-				<el-table-column prop="modTime" label="修改时间" width="180" align="center">
-					<template #default="scope: { row: FileTree }">
-						{{ scope.row.updateAt }}
-					</template>
-				</el-table-column>
-
-				<el-table-column label="操作" width="120" align="center" fixed="right">
-					<template #default="scope: { row: FileTree }">
-						<el-button
-							size="small"
-							text
-							type="primary"
-							@click="startDownload(scope.row)"
-							:disabled="scope.row.children !== undefined"
-							:loading="downloadLoading && currentDownloadingId === scope.row.id"
-						>
-							下载
-						</el-button>
-						<el-button size="small" text type="danger" @click="handleDelete(scope.row)"> 删除</el-button>
-					</template>
-				</el-table-column>
-			</el-table>
 		</el-dialog>
 	</div>
 </template>
 
 <style scoped lang="scss">
-.file-manager-container {
-	padding: 20px;
-
-	.toolbar {
-		margin-bottom: 20px;
-		padding-bottom: 15px;
-		border-bottom: 1px solid #ebeef5;
-	}
-
-	.content-area {
-		display: flex;
-		gap: 20px;
-		height: calc(100vh - 200px);
-	}
-
-	.file-tree-panel {
-		width: 300px;
-		border: 1px solid #ebeef5;
-		border-radius: 4px;
-		overflow: hidden;
-
-		.panel-header {
-			background-color: #f5f7fa;
-			padding: 15px;
-			border-bottom: 1px solid #ebeef5;
-
-			h3 {
-				margin: 0;
-				font-size: 16px;
-				color: #303133;
-			}
-		}
-
-		.tree-container {
-			padding: 10px;
-			height: calc(100% - 60px);
-			overflow: auto;
-
-			.tree-node {
-				display: flex;
-				align-items: center;
-				font-size: 14px;
-
-				.tree-icon {
-					margin-right: 8px;
-					color: #606266;
-				}
-
-				.tree-label {
-					color: #303133;
-				}
-			}
-		}
-	}
-
-	.file-list-panel {
+.page {
+	.flex1 {
 		flex: 1;
-		display: flex;
-		flex-direction: column;
-		border: 1px solid #ebeef5;
-		border-radius: 4px;
+	}
+
+	.custom-tree-node {
 		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
 
-		.breadcrumb-container {
+	.current-path,
+	.search-result {
+		font-size: 14px;
+		color: #909399;
+	}
+
+	.mb-4 {
+		margin-bottom: 16px;
+	}
+
+	.ml-2 {
+		margin-left: 8px;
+	}
+
+	.upload-area {
+		.selected-file {
+			margin-top: 8px;
+			padding: 8px;
 			background-color: #f5f7fa;
-			padding: 15px;
-			border-bottom: 1px solid #ebeef5;
-		}
+			border-radius: 4px;
+			border: 1px solid #e4e7ed;
 
-		.table-container {
-			flex: 1;
-			padding: 0;
-			overflow: auto;
+			.file-name {
+				font-weight: 500;
+			}
 
-			.file-item {
-				display: flex;
-				align-items: center;
-
-				.file-icon {
-					margin-right: 8px;
-					color: #606266;
-				}
-
-				.file-name {
-					color: #303133;
-				}
+			.file-size {
+				color: #909399;
+				font-size: 12px;
+				margin-left: 8px;
 			}
 		}
 	}
-}
 
-// Element Plus 样式覆盖
-:deep(.el-table) {
-	.el-table__body-wrapper {
-		height: 100%;
-	}
-}
-
-:deep(.el-tree) {
-	background: transparent;
-
-	.el-tree-node__content {
-		padding: 8px 0;
-
-		&:hover {
-			background-color: #f5f7fa;
-		}
-	}
-}
-
-:deep(.el-breadcrumb__item) {
-	.el-breadcrumb__inner {
-		&:hover {
-			color: #409eff;
+	.file-detail {
+		.el-descriptions {
+			margin-top: 16px;
 		}
 	}
 }

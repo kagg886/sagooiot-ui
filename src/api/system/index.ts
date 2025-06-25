@@ -123,28 +123,28 @@ export default {
     detail: (infoId: number) => get('/system/login/log/detail', { infoId }),
     clearLog: () => post('/system/login/log/clear'),
   },
-  file: {
-    list: (path: string) => get('/system/file/list', { path }),
-    upload: ({file,remark,path}: {file: Blob,path: string,remark?: string,title?:string}) => {
-      const form = new FormData();
-      form.set('file', file)
-      form.set('path', path)
+	file: {
+		list: (param: { path: string; pageNum: number; pageSize: number }) => get('/system/file/list', param),
+		upload: ({ file, remark, path }: { file: Blob; path: string; remark?: string; title?: string }) => {
+			const form = new FormData()
+			form.set('file', file)
+			form.set('path', path)
 
-      if (remark !== undefined) {
-        form.set('remark', remark)
-      }
-      if (remark!== undefined) {
-        form.set('title', remark)
-      }
+			if (remark !== undefined) {
+				form.set('remark', remark)
+			}
+			if (remark !== undefined) {
+				form.set('title', remark)
+			}
 
-      return post('/system/file/upload', form)
-    },
-    download: (id: number) => file('/system/file/download', { id }),
-		dir: (data: {name: string,remark: string,path: string}) => post('/system/file/create/dir', data),
-		delete: (id: number, isDir: boolean) => post('/system/file/del', { id, isDir }),
-
-		search: (query: string) => get('/system/file/search', { query })
-  },
+			return post('/system/file/upload', form)
+		},
+		download: (id: number) => file('/system/file/download', { id }),
+		tree: () => get('/system/file/dir/tree'),
+		createDir: (data: { name: string; remark: string; path: string }) => post('/system/file/create/dir', data),
+		deleteFile: (id: number, isDir: boolean) => post('/system/file/del', { id, isDir }),
+		search: (data: { query: string,pageNum: number,pageSize: number }) => get('/system/file/search',  data),
+	},
   oper: {
     getList: (params: object) => get('/system/oper/log/list', params),
     del: (operIds: number) => del('/system/oper/log/del', { operIds }),
