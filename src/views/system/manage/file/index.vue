@@ -21,7 +21,7 @@ type RemoteFile = {
 	title?: string
 	remark?: string
 	size: number
-	updatedAt: string
+	updateAt: string
 }
 
 // 响应式数据
@@ -33,7 +33,7 @@ const isSearchMode = ref(false)
 const treeData = ref<Dictionary[]>([])
 const treeProps = {
 	children: 'childrens',
-	label: 'name'
+	label: 'name',
 }
 
 // 当前选中的路径
@@ -46,15 +46,15 @@ const fileList = reactive({
 	param: {
 		path: '/',
 		pageNum: 1,
-		pageSize: 10
-	}
+		pageSize: 10,
+	},
 })
 
 // 搜索数据
 const searchData = reactive({
 	query: '',
 	pageNum: 1,
-	pageSize: 10
+	pageSize: 10,
 })
 
 const pageNum = computed({
@@ -67,12 +67,12 @@ const pageNum = computed({
 		} else {
 			fileList.param.pageNum = newVal
 		}
-	}
+	},
 })
 
 const pageSize = computed({
 	get() {
-		return isSearchMode.value === true? searchData.pageSize : fileList.param.pageSize
+		return isSearchMode.value === true ? searchData.pageSize : fileList.param.pageSize
 	},
 	set(newVal) {
 		if (isSearchMode.value) {
@@ -80,7 +80,7 @@ const pageSize = computed({
 		} else {
 			fileList.param.pageSize = newVal
 		}
-	}
+	},
 })
 
 // 对话框状态
@@ -88,27 +88,31 @@ const dialogState = reactive({
 	fileDetail: false,
 	createFolder: false,
 	uploadFile: false,
-	selectedFile: null as RemoteFile | null
+	selectedFile: null as RemoteFile | null,
 })
 
 // 创建文件夹表单
 const folderForm = reactive({
 	name: '',
 	remark: '',
-	path: ''
+	path: '',
 })
 
 // 上传文件表单
 const uploadForm = reactive({
 	remark: '',
 	title: '',
-	path: ''
+	path: '',
 })
 
 // 文件对话框
-const { files, open: openFileDialog, reset: resetFileDialog } = useFileDialog({
+const {
+	files,
+	open: openFileDialog,
+	reset: resetFileDialog,
+} = useFileDialog({
 	accept: '*/*',
-	multiple: false
+	multiple: false,
 })
 
 // 格式化文件大小
@@ -234,15 +238,11 @@ const deleteFile = (file: RemoteFile) => {
 	if (deletingFileIds.value.has(file.id)) return
 
 	const isDirectory = file.size === 0 // 假设目录大小为0
-	ElMessageBox.confirm(
-		`确定要删除${isDirectory ? '文件夹' : '文件'} "${getFileName(file)}" 吗？`,
-		'确认删除',
-		{
-			confirmButtonText: '确定',
-			cancelButtonText: '取消',
-			type: 'warning'
-		}
-	).then(async () => {
+	ElMessageBox.confirm(`确定要删除${isDirectory ? '文件夹' : '文件'} "${getFileName(file)}" 吗？`, '确认删除', {
+		confirmButtonText: '确定',
+		cancelButtonText: '取消',
+		type: 'warning',
+	}).then(async () => {
 		deletingFileIds.value.add(file.id)
 		try {
 			await api.file.deleteFile(file.id, isDirectory)
@@ -274,12 +274,7 @@ const { loading: createFolderLoading, doLoading: doCreateFolder } = useLoading(a
 	ElMessage.success('创建文件夹成功')
 	dialogState.createFolder = false
 
-	await Promise.all(
-		[
-			loadTreeData(),
-			loadFileList()
-		]
-	)
+	await Promise.all([loadTreeData(), loadFileList()])
 })
 
 const createFolder = async () => {
@@ -304,7 +299,6 @@ const openUploadDialog = () => {
 	dialogState.uploadFile = true
 }
 
-
 // 上传文件
 const { loading: uploadFileLoading, doLoading: doUploadFile } = useLoading(async () => {
 	const file = files.value![0]
@@ -312,7 +306,7 @@ const { loading: uploadFileLoading, doLoading: doUploadFile } = useLoading(async
 		file: file,
 		path: uploadForm.path,
 		remark: uploadForm.remark,
-		title: uploadForm.title
+		title: uploadForm.title,
 	})
 	ElMessage.success('上传文件成功')
 	dialogState.uploadFile = false
@@ -342,6 +336,17 @@ onMounted(() => {
 	loadTreeData()
 	loadFileList()
 })
+
+const handlePagination = ({page}: {page: number})=> {
+	// pageNum=page;pageSize=limit;doSearchFiles()
+	pageNum.value = page;
+	// pageSize.value = limit;
+	if (isSearchMode.value) {
+		searchFiles()
+	} else {
+		loadFileList()
+	}
+}
 </script>
 
 <template>
@@ -349,13 +354,7 @@ onMounted(() => {
 		<!-- 左侧目录树 -->
 		<el-card shadow="never" style="width: 260px">
 			<el-scrollbar>
-				<el-input
-					:prefix-icon="Search"
-					v-model="filterText"
-					placeholder="请输入目录名称"
-					clearable
-					style="width: 100%;"
-				/>
+				<el-input :prefix-icon="Search" v-model="filterText" placeholder="请输入目录名称" clearable style="width: 100%" />
 				<el-tree
 					ref="treeRef"
 					class="filter-tree mt-4"
@@ -389,20 +388,26 @@ onMounted(() => {
 					>
 						<template #append>
 							<el-button @click="searchFiles" :loading="searchLoading">
-								<el-icon><Search /></el-icon>
+								<el-icon>
+									<Search />
+								</el-icon>
 							</el-button>
 						</template>
 					</el-input>
 				</el-form-item>
 				<el-form-item>
 					<el-button type="primary" @click="openCreateFolderDialog">
-						<el-icon><FolderAdd /></el-icon>
+						<el-icon>
+							<FolderAdd />
+						</el-icon>
 						创建文件夹
 					</el-button>
 				</el-form-item>
 				<el-form-item>
 					<el-button type="success" @click="openUploadDialog">
-						<el-icon><Upload /></el-icon>
+						<el-icon>
+							<Upload />
+						</el-icon>
 						上传文件
 					</el-button>
 				</el-form-item>
@@ -419,13 +424,13 @@ onMounted(() => {
 
 			<!-- 文件列表表格 -->
 			<el-table :data="fileList.data" style="width: 100%" v-loading="fileListLoading || searchLoading">
-				<el-table-column type="index" label="序号" width="60" align="center" />
-				<el-table-column prop="name" label="文件名" min-width="200" show-overflow-tooltip>
+				<el-table-column prop="id" label="序号" width="60" align="center" />
+				<el-table-column prop="name" label="文件名" min-width="200">
 					<template #default="{ row }">
 						{{ getFileName(row) }}
 					</template>
 				</el-table-column>
-				<el-table-column prop="remark" label="备注" min-width="150" show-overflow-tooltip>
+				<el-table-column prop="remark" label="备注" min-width="150">
 					<template #default="{ row }">
 						{{ limitRemark(row.remark) }}
 					</template>
@@ -435,77 +440,80 @@ onMounted(() => {
 						{{ formatFileSize(row.size) }}
 					</template>
 				</el-table-column>
-				<el-table-column prop="updatedAt" label="更新时间" width="180" align="center" />
+				<el-table-column prop="updateAt" label="更新时间" width="180" align="center" />
 				<el-table-column label="操作" width="200" align="center">
 					<template #default="{ row }">
 						<el-button size="small" text type="primary" @click="viewFileDetail(row)">
-							<el-icon><View /></el-icon>
+							<el-icon>
+								<View />
+							</el-icon>
 							查看
 						</el-button>
 
 						<el-button size="small" text type="info" @click="startDownload(row)" :loading="downloadingFileIds.has(row.id)">
-							<el-icon><Download /></el-icon>
+							<el-icon>
+								<Download />
+							</el-icon>
 							下载
 						</el-button>
 
 						<el-button size="small" text type="danger" @click="deleteFile(row)" :loading="deletingFileIds.has(row.id)">
-							<el-icon><Delete /></el-icon>
+							<el-icon>
+								<Delete />
+							</el-icon>
 							删除
 						</el-button>
 					</template>
 				</el-table-column>
 			</el-table>
 
-<!--			readonly total: NumberConstructor;-->
-<!--			readonly pageSize: NumberConstructor;-->
-<!--			readonly defaultPageSize: NumberConstructor;-->
-<!--			readonly currentPage: NumberConstructor;-->
-<!--			readonly defaultCurrentPage: NumberConstructor;-->
-<!--			readonly pageCount: NumberConstructor;-->
-<!--			readonly pagerCount: import("element-plus/es/utils").EpPropFinalized<NumberConstructor, unknown, unknown, 7, boolean>;-->
-<!--			readonly layout: import("element-plus/es/utils").EpPropFinalized<StringConstructor, unknown, unknown, string, boolean>;-->
-<!--			readonly pageSizes: import("element-plus/es/utils").EpPropFinalized<(new (...args: any[]) => number[]) | (() => number[]) | ((new (...args: any[]) => number[]) | (() => number[]))[], unknown, unknown, () => [10, 20, 30, 40, 50, 100], boolean>;-->
-<!--			readonly popperClass: import("element-plus/es/utils").EpPropFinalized<StringConstructor, unknown, unknown, "", boolean>;-->
-<!--			readonly prevText: import("element-plus/es/utils").EpPropFinalized<StringConstructor, unknown, unknown, "", boolean>;-->
-<!--			readonly prevIcon: import("element-plus/es/utils").EpPropFinalized<(new (...args: any[]) => (string | import("vue").Component<any, any, any, import("vue").ComputedOptions, import("vue").MethodOptions>) & {}) | (() => string | import("vue").Component<any, any, any, import("vue").ComputedOptions, import("vue").MethodOptions>) | ((new (...args: any[]) => (string | import("vue").Component<any, any, any, import("vue").ComputedOptions, import("vue").MethodOptions>) & {}) | (() => string | import("vue").Component<any, any, any, import("vue").ComputedOptions, import("vue").MethodOptions>))[], unknown, unknown, () => import("vue").DefineComponent<{}, {}, {}, import("vue").ComputedOptions, import("vue").MethodOptions, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, {}, string, import("vue").VNodeProps & import("vue").AllowedComponentProps & import("vue").ComponentCustomProps, Readonly<import("vue").ExtractPropTypes<{}>>, {}>, boolean>;-->
-<!--			readonly nextText: import("element-plus/es/utils").EpPropFinalized<StringConstructor, unknown, unknown, "", boolean>;-->
-<!--			readonly nextIcon: import("element-plus/es/utils").EpPropFinalized<(new (...args: any[]) => (string | import("vue").Component<any, any, any, import("vue").ComputedOptions, import("vue").MethodOptions>) & {}) | (() => string | import("vue").Component<any, any, any, import("vue").ComputedOptions, import("vue").MethodOptions>) | ((new (...args: any[]) => (string | import("vue").Component<any, any, any, import("vue").ComputedOptions, import("vue").MethodOptions>) & {}) | (() => string | import("vue").Component<any, any, any, import("vue").ComputedOptions, import("vue").MethodOptions>))[], unknown, unknown, () => import("vue").DefineComponent<{}, {}, {}, import("vue").ComputedOptions, import("vue").MethodOptions, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, {}, string, import("vue").VNodeProps & import("vue").AllowedComponentProps & import("vue").ComponentCustomProps, Readonly<import("vue").ExtractPropTypes<{}>>, {}>, boolean>;-->
-<!--			readonly small: BooleanConstructor;-->
-<!--			readonly background: BooleanConstructor;-->
-<!--			readonly disabled: BooleanConstructor;-->
-<!--			readonly hideOnSinglePage: BooleanConstructor;-->
-<!--			<pagination v-show="tableData.total > 0" :total="tableData.total" v-model:page="tableData.param.pageNum" v-model:limit="tableData.param.pageSize" @pagination="userList" />-->
+			<!--			readonly total: NumberConstructor;-->
+			<!--			readonly pageSize: NumberConstructor;-->
+			<!--			readonly defaultPageSize: NumberConstructor;-->
+			<!--			readonly currentPage: NumberConstructor;-->
+			<!--			readonly defaultCurrentPage: NumberConstructor;-->
+			<!--			readonly pageCount: NumberConstructor;-->
+			<!--			readonly pagerCount: import("element-plus/es/utils").EpPropFinalized<NumberConstructor, unknown, unknown, 7, boolean>;-->
+			<!--			readonly layout: import("element-plus/es/utils").EpPropFinalized<StringConstructor, unknown, unknown, string, boolean>;-->
+			<!--			readonly pageSizes: import("element-plus/es/utils").EpPropFinalized<(new (...args: any[]) => number[]) | (() => number[]) | ((new (...args: any[]) => number[]) | (() => number[]))[], unknown, unknown, () => [10, 20, 30, 40, 50, 100], boolean>;-->
+			<!--			readonly popperClass: import("element-plus/es/utils").EpPropFinalized<StringConstructor, unknown, unknown, "", boolean>;-->
+			<!--			readonly prevText: import("element-plus/es/utils").EpPropFinalized<StringConstructor, unknown, unknown, "", boolean>;-->
+			<!--			readonly prevIcon: import("element-plus/es/utils").EpPropFinalized<(new (...args: any[]) => (string | import("vue").Component<any, any, any, import("vue").ComputedOptions, import("vue").MethodOptions>) & {}) | (() => string | import("vue").Component<any, any, any, import("vue").ComputedOptions, import("vue").MethodOptions>) | ((new (...args: any[]) => (string | import("vue").Component<any, any, any, import("vue").ComputedOptions, import("vue").MethodOptions>) & {}) | (() => string | import("vue").Component<any, any, any, import("vue").ComputedOptions, import("vue").MethodOptions>))[], unknown, unknown, () => import("vue").DefineComponent<{}, {}, {}, import("vue").ComputedOptions, import("vue").MethodOptions, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, {}, string, import("vue").VNodeProps & import("vue").AllowedComponentProps & import("vue").ComponentCustomProps, Readonly<import("vue").ExtractPropTypes<{}>>, {}>, boolean>;-->
+			<!--			readonly nextText: import("element-plus/es/utils").EpPropFinalized<StringConstructor, unknown, unknown, "", boolean>;-->
+			<!--			readonly nextIcon: import("element-plus/es/utils").EpPropFinalized<(new (...args: any[]) => (string | import("vue").Component<any, any, any, import("vue").ComputedOptions, import("vue").MethodOptions>) & {}) | (() => string | import("vue").Component<any, any, any, import("vue").ComputedOptions, import("vue").MethodOptions>) | ((new (...args: any[]) => (string | import("vue").Component<any, any, any, import("vue").ComputedOptions, import("vue").MethodOptions>) & {}) | (() => string | import("vue").Component<any, any, any, import("vue").ComputedOptions, import("vue").MethodOptions>))[], unknown, unknown, () => import("vue").DefineComponent<{}, {}, {}, import("vue").ComputedOptions, import("vue").MethodOptions, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, {}, string, import("vue").VNodeProps & import("vue").AllowedComponentProps & import("vue").ComponentCustomProps, Readonly<import("vue").ExtractPropTypes<{}>>, {}>, boolean>;-->
+			<!--			readonly small: BooleanConstructor;-->
+			<!--			readonly background: BooleanConstructor;-->
+			<!--			readonly disabled: BooleanConstructor;-->
+			<!--			readonly hideOnSinglePage: BooleanConstructor;-->
+			<!--			<pagination v-show="tableData.total > 0" :total="tableData.total" v-model:page="tableData.param.pageNum" v-model:limit="tableData.param.pageSize" @pagination="userList" />-->
 			<pagination
 				v-show="fileList.total > 0"
 				:total="fileList.total"
 				v-model:page="pageNum"
 				v-model:limit="pageSize"
+				@pagination="handlePagination"
 			/>
 			<!--			<el-pagination-->
-<!--				:total="fileList.total"-->
-<!--				:page-size="fileList.param.pageSize"-->
-<!--				:current-page="fileList.param.pageNum"-->
-<!--				@current-change="(page: number) => fileList.param.pageNum = page"-->
-<!--				@size-change="(size: number) => fileList.param.pageSize = size"-->
-<!--			>-->
-<!--			</el-pagination>-->
+			<!--				:total="fileList.total"-->
+			<!--				:page-size="fileList.param.pageSize"-->
+			<!--				:current-page="fileList.param.pageNum"-->
+			<!--				@current-change="(page: number) => fileList.param.pageNum = page"-->
+			<!--				@size-change="(size: number) => fileList.param.pageSize = size"-->
+			<!--			>-->
+			<!--			</el-pagination>-->
 
-<!--			&lt;!&ndash; 分页 &ndash;&gt;-->
-<!--			<pagination-->
-<!--				v-show="fileList.total > 0"-->
-<!--				:total="fileList.total"-->
-<!--				v-model:page="currentFileList.pageNum"-->
-<!--				v-model:limit="currentFileList.pageSize"-->
-<!--				@pagination="handlePagination"-->
-<!--			/>-->
+			<!--			&lt;!&ndash; 分页 &ndash;&gt;-->
+			<!--			<pagination-->
+			<!--				v-show="fileList.total > 0"-->
+			<!--				:total="fileList.total"-->
+			<!--				v-model:page="currentFileList.pageNum"-->
+			<!--				v-model:limit="currentFileList.pageSize"-->
+			<!--				@pagination="handlePagination"-->
+			<!--			/>-->
 		</el-card>
 
 		<!-- 文件详情对话框 -->
-		<el-dialog
-			title="文件详情"
-			v-model="dialogState.fileDetail"
-			width="500px"
-		>
+		<el-dialog title="文件详情" v-model="dialogState.fileDetail" width="500px">
 			<div v-if="dialogState.selectedFile" class="file-detail">
 				<el-descriptions :column="1" border>
 					<el-descriptions-item label="文件名">
@@ -514,31 +522,36 @@ onMounted(() => {
 					<el-descriptions-item label="标题" v-if="dialogState.selectedFile.title">
 						{{ dialogState.selectedFile.title }}
 					</el-descriptions-item>
-					<el-descriptions-item label="备注" v-if="dialogState.selectedFile.remark">
-						{{ dialogState.selectedFile.remark }}
-					</el-descriptions-item>
 					<el-descriptions-item label="大小">
 						{{ formatFileSize(dialogState.selectedFile.size) }}
 					</el-descriptions-item>
 					<el-descriptions-item label="更新时间">
-						{{ dialogState.selectedFile.updatedAt }}
+						{{ dialogState.selectedFile?.updateAt }}
 					</el-descriptions-item>
 				</el-descriptions>
+				<div v-if="dialogState.selectedFile.remark" class="file-remark">
+					<h4>备注：</h4>
+					<div class="remark-content">
+						{{ dialogState.selectedFile.remark }}
+					</div>
+				</div>
 			</div>
 		</el-dialog>
 
 		<!-- 创建文件夹对话框 -->
-		<el-dialog
-			title="创建文件夹"
-			v-model="dialogState.createFolder"
-			width="500px"
-		>
+		<el-dialog title="创建文件夹" v-model="dialogState.createFolder" width="500px">
 			<el-form :model="folderForm" label-width="80px">
 				<el-form-item label="名称" required>
 					<el-input v-model="folderForm.name" placeholder="请输入文件夹名称" />
 				</el-form-item>
 				<el-form-item label="备注">
-					<el-input v-model="folderForm.remark" placeholder="请输入备注" />
+					<el-input 
+						v-model="folderForm.remark" 
+						type="textarea" 
+						:rows="3" 
+						placeholder="请输入备注" 
+						resize="none"
+					/>
 				</el-form-item>
 				<el-form-item label="父目录">
 					<el-input v-model="folderForm.path" readonly />
@@ -551,16 +564,14 @@ onMounted(() => {
 		</el-dialog>
 
 		<!-- 上传文件对话框 -->
-		<el-dialog
-			title="上传文件"
-			v-model="dialogState.uploadFile"
-			width="500px"
-		>
+		<el-dialog title="上传文件" v-model="dialogState.uploadFile" width="500px">
 			<el-form :model="uploadForm" label-width="80px">
 				<el-form-item label="选择文件" required>
 					<div class="upload-area">
 						<el-button @click="openFileDialog">
-							<el-icon><Upload /></el-icon>
+							<el-icon>
+								<Upload />
+							</el-icon>
 							选择文件
 						</el-button>
 						<div v-if="files && files.length > 0" class="selected-file">
@@ -573,7 +584,13 @@ onMounted(() => {
 					<el-input v-model="uploadForm.title" placeholder="请输入文件标题" />
 				</el-form-item>
 				<el-form-item label="备注">
-					<el-input v-model="uploadForm.remark" placeholder="请输入备注" />
+					<el-input 
+						v-model="uploadForm.remark" 
+						type="textarea" 
+						:rows="3" 
+						placeholder="请输入备注" 
+						resize="none"
+					/>
 				</el-form-item>
 				<el-form-item label="上传到">
 					<el-input v-model="uploadForm.path" readonly />
@@ -636,6 +653,29 @@ onMounted(() => {
 	.file-detail {
 		.el-descriptions {
 			margin-top: 16px;
+		}
+		
+		.file-remark {
+			margin-top: 20px;
+			
+			h4 {
+				margin: 0 0 8px 0;
+				font-size: 14px;
+				font-weight: 500;
+				color: #303133;
+			}
+			
+			.remark-content {
+				padding: 12px;
+				background-color: #f5f7fa;
+				border: 1px solid #e4e7ed;
+				border-radius: 4px;
+				line-height: 1.5;
+				white-space: pre-wrap;
+				word-break: break-word;
+				min-height: 60px;
+				color: #606266;
+			}
 		}
 	}
 }
