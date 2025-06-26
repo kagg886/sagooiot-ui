@@ -10,8 +10,8 @@ export interface Complaint {
   source: string;
   priority: string;
   status: string;
-  complainant_name: string;
-  complainant_contact?: string;
+  complainantName: string;
+  contact?: string;
   area: ComplaintArea;
   assignee: string;
   satisfaction?: number | null;
@@ -24,15 +24,14 @@ export interface Complaint {
 export interface ComplaintListItem {
   id: string;
   title: string;
-  type: string;
+  category: string;
   source: string;
-  priority: string;
-  status: string;
+  level: string;
+  status: 'pending' | 'processing' | 'completed';
   complainant_name: string;
   area: ComplaintArea;
   assignee: string;
-  created_at: string;
-  updated_at: string;
+  updatedAt: string;
 }
 
 // 创建投诉请求类型
@@ -58,13 +57,14 @@ export interface UpdateComplaintRequest {
 
 // 投诉查询参数类型
 export interface ComplaintQueryParams {
-  page?: number;
+  pageNum?: number;
   pageSize?: number;
-  search?: string;
-  status?: string;
-  type?: string;
-  priority?: string;
-  area?: ComplaintArea;
+
+
+  name?: string; //关键词
+  status?: string; //状态
+  category?: string; //类型
+  level?: string; //等级
 }
 
 // 概要统计数据类型

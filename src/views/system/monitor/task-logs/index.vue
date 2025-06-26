@@ -40,7 +40,7 @@ const searchParam = reactive<{
 	status?: StatusEnum
 }>({
 	pageNum: 1,
-	pageSize: 10,
+	PageSize: 10,
 })
 
 const total = ref<number>(0)
