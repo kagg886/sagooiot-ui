@@ -70,21 +70,6 @@ const formatReportSource = computed<(value: string) => string>(() => {
 		return proxy.selectDictLabel(sources, value)
 	}
 })
-
-// eslint-disable-next-line no-unused-vars
-const formatReportType = computed<(value: string) => string>(() => {
-	const types = unref(report_type)
-	return (value: string) => {
-		if (value === undefined) {
-			return '-'
-		}
-		if (types === undefined) {
-			return '-'
-		}
-		return proxy.selectDictLabel(types, value)
-	}
-})
-
 const formatReportStatus = (value: Complaint['status']) => {
 	let a = '-'
 	switch (value) {

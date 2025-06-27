@@ -27,10 +27,13 @@ export type UpdateComplaintRequest = CreateComplaintRequest & {
   id: number;
 }
 
+export type BasePageQuery = {
+	pageNum?: number;
+	pageSize?: number;
+}
+
 // 投诉查询参数类型
-export interface ComplaintQueryParams {
-  pageNum?: number;
-  pageSize?: number;
+export type ComplaintQueryParams = BasePageQuery & {
 
 	dateRange?: [string, string]; //时间范围
 
@@ -80,4 +83,21 @@ export type AreaDistribution = {
 // 统计查询参数类型
 export type StatisticsQueryParams = {
   timeRange?: 'week' | 'month' | 'quarter' | 'year';
+}
+
+export type Feedback = {
+  id: number; // 反馈ID
+	surveyCode: string; // 问卷编号
+	ticketNo: number // 投诉编号
+	investigatorName: string; // 调查者姓名
+	contactInfo: string; // 联系信息
+	processingSpeed: string; // 处理速度(字典related_level)
+	staffAttitude: string; // 工作人员态度(字典related_level)
+	resolutionEffect: string // 解决效果(字典related_level)
+	otherSuggestions: string; // 其他建议
+	createdAt: string; // 创建时间
+}
+
+export type FeedbackQueryParams = BasePageQuery & {
+	investigatorName?: string;
 }
