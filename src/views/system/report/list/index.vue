@@ -130,19 +130,26 @@ const handleEdit = (row: ComplaintListItem) => {
 	ElMessage.info(`编辑投诉: ${row.title}`)
 }
 
-const handleDeleteSingle = (row: ComplaintListItem) => {
-	ElMessageBox.confirm(`确定要删除投诉 "${row.title}" 吗？`, '提示', {
+const handleDeleteSingle = async (row: ComplaintListItem) => {
+	const status = await ElMessageBox.confirm(`确定要删除投诉 "${row.title}" 吗？`, '提示', {
 		confirmButtonText: '确定',
 		cancelButtonText: '取消',
 		type: 'warning',
 	})
-		.then(() => {
-			ElMessage.success('删除成功')
-			getComplaintList()
-		})
-		.catch(() => {
-			// 用户取消删除
-		})
+
+	if (status !== 'confirm') {
+		return
+	}
+
+	const result = await complaints
+		.del(row.id)
+		.then(()=>true)
+		.catch(()=>false)
+
+	if (result) {
+		ElMessage.success('删除成功')
+		await getComplaintList()
+	}
 }
 
 const handleDelete = () => {

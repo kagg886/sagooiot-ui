@@ -3,7 +3,7 @@ export type ComplaintArea = 'A区' | 'B区'
 
 // 投诉实体类型
 export interface Complaint {
-  id: string;
+  id: number;
   title: string;
   content?: string;
   type: string;
@@ -22,7 +22,7 @@ export interface Complaint {
 
 // 投诉列表项类型（用于列表显示）
 export interface ComplaintListItem {
-  id: string;
+  id: number;
   title: string;
   category: string;
   source: string;

@@ -22,5 +22,5 @@ export default {
   edit: (id: string, data: UpdateComplaintRequest) => put(`/system/complaint/${id}`, data),
 
   // 删除投诉
-  del: (id: string) => del(`/system/complaint/${id}`)
+  del: (id: number) => del(`/system/complaint/delete`, {id})
 };
