@@ -13,7 +13,7 @@ export default {
     get('/system/complaint/list', params),
 
   // 创建投诉
-  add: (data: CreateComplaintRequest) => post('/system/complaint', data),
+  add: (data: CreateComplaintRequest) => post('/system/complaint/add', data),
 
   // 获取投诉详情
   detail: (id: string): Promise<Complaint> => get(`/system/complaint/${id}`),

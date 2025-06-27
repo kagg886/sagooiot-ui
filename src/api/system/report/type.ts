@@ -21,32 +21,24 @@ export interface Complaint {
 }
 
 // 投诉列表项类型（用于列表显示）
-export interface ComplaintListItem {
-  id: number;
-  title: string;
-  category: string;
-  source: string;
-  level: string;
-  status: 'pending' | 'processing' | 'completed';
-  complainant_name: string;
-  area: ComplaintArea;
-  assignee: string;
-  updatedAt: string;
+export type ComplaintListItem = {
+	id: number;
+	title: string;
+	category: string; //来自字典：report_type
+	source: string; //来自字典：report_source
+	level: string; //来自字典：report_level
+	content: string;
+	status: 'pending' | 'processing' | 'completed';
+	contact: string;
+	complainantName: string;
+	area: ComplaintArea;
+	assignee: string;
+	updatedAt: string;
 }
 
-// 创建投诉请求类型
-export interface CreateComplaintRequest {
-  title: string;
-  content: string;
-  type: string;
-  source: string;
-  priority: string;
-  complainant_name: string;
-  complainant_contact: string;
-  area: ComplaintArea;
-  assignee: string;
+export type CreateComplaintRequest = Pick<ComplaintListItem, 'title' | 'category' | 'source' | 'area' | 'complainantName' | 'contact' | 'level' | 'content'> & {
+	assignee?: number;
 }
-
 // 更新投诉请求类型
 export interface UpdateComplaintRequest {
   title?: string;

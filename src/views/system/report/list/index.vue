@@ -4,7 +4,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Plus, Delete, Download, View, Edit } from '@element-plus/icons-vue'
 import { useLoading } from '/@/utils/loading-util'
 import complaints from '/@/api/system/report/complaints'
-import type { ComplaintListItem, ComplaintQueryParams } from '/@/api/system/report/type'
+import type { ComplaintListItem, ComplaintQueryParams, CreateComplaintRequest, ComplaintArea } from '/@/api/system/report/type'
 import system from '/@/api/system'
 import { useAsyncState } from '@vueuse/core'
 
@@ -120,8 +120,60 @@ const handleSelectionChange = (selection: ComplaintListItem[]) => {
 	selectedIds.value = selection.map((item) => item.id)
 }
 
+// 新增投诉相关
+const addDialogVisible = ref(false)
+const addFormRef = ref()
+const addForm = ref<CreateComplaintRequest>({
+	title: '',
+	category: '',
+	source: '',
+	area: 'A区' as ComplaintArea,
+	complainantName: '',
+	contact: '',
+	level: '',
+	content: '',
+	assignee: undefined
+})
+
+// 表单验证规则
+const addFormRules = {
+	title: [{ required: true, message: '请输入投诉标题', trigger: 'blur' }],
+	category: [{ required: true, message: '请选择投诉类型', trigger: 'change' }],
+	source: [{ required: true, message: '请选择投诉来源', trigger: 'change' }],
+	area: [{ required: true, message: '请选择投诉区域', trigger: 'change' }],
+	complainantName: [{ required: true, message: '请输入投诉人姓名', trigger: 'blur' }],
+	level: [{ required: true, message: '请选择投诉等级', trigger: 'change' }],
+	content: [{ required: true, message: '请输入投诉内容', trigger: 'blur' }]
+}
+
 const handleAdd = () => {
-	ElMessage.info('新增投诉功能开发中...')
+	addDialogVisible.value = true
+}
+
+const handleAddCancel = () => {
+	addDialogVisible.value = false
+	addFormRef.value?.resetFields()
+}
+
+const handleAddConfirm = async () => {
+	const valid = await addFormRef.value?.validate().catch(() => false)
+	if (!valid) {
+		return
+	}
+
+	const result = await complaints
+		.add(addForm.value)
+		.then(() => true)
+		.catch(() => false)
+
+	if (result) {
+		ElMessage.success('新增投诉成功')
+		addDialogVisible.value = false
+		addFormRef.value?.resetFields()
+		await getComplaintList()
+	} else {
+		ElMessage.error('新增投诉失败')
+	}
 }
 
 const handleDetail = (row: ComplaintListItem) => {
@@ -197,13 +249,12 @@ type SimpleUser = {
 
 //用户获取
 const { state: userList ,isLoading: isLoadingUserList,execute: loadingUserList } = useAsyncState<SimpleUser[]>(async (name: string) => {
-	const data = await system.user.getList({ keyWords: name }).catch(() => undefined)
-
+	const data = await system.user.getList({ keyWords: name,status: 1 }).then((res: {list: SimpleUser[]})=>res.list).catch(() => undefined)
 	if (data === undefined) {
 		return []
 	}
 
-	return data.list
+	return data
 }, [])
 </script>
 
@@ -333,6 +384,140 @@ const { state: userList ,isLoading: isLoadingUserList,execute: loadingUserList }
 			<pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="handlePageChange" />
 
 		</el-card>
+
+		<!-- 新增投诉对话框 -->
+		<el-dialog v-model="addDialogVisible" title="新建投诉" width="600px" :close-on-click-modal="false">
+			<el-form
+				ref="addFormRef"
+				:model="addForm"
+				:rules="addFormRules"
+				label-width="100px"
+				label-position="left"
+			>
+				<el-form-item label="投诉标题" prop="title" required>
+					<el-input
+						v-model="addForm.title"
+						placeholder="请输入投诉标题"
+						maxlength="100"
+						show-word-limit
+					/>
+				</el-form-item>
+
+				<el-form-item label="投诉类型" prop="category" required>
+					<el-select
+						v-model="addForm.category"
+						placeholder="选择投诉类型"
+						style="width: 100%"
+					>
+						<el-option
+							v-for="item in report_type"
+							:key="item.value"
+							:label="item.label"
+							:value="item.value"
+						/>
+					</el-select>
+				</el-form-item>
+
+				<el-form-item label="投诉来源" prop="source" required>
+					<el-select
+						v-model="addForm.source"
+						placeholder="选择投诉来源"
+						style="width: 100%"
+					>
+						<el-option
+							v-for="item in report_source"
+							:key="item.value"
+							:label="item.label"
+							:value="item.value"
+						/>
+					</el-select>
+				</el-form-item>
+
+				<el-form-item label="投诉区域" prop="area" required>
+					<el-select
+						v-model="addForm.area"
+						placeholder="选择投诉区域"
+						style="width: 100%"
+					>
+						<el-option label="A区" value="A区" />
+						<el-option label="B区" value="B区" />
+					</el-select>
+				</el-form-item>
+
+				<el-form-item label="投诉人姓名" prop="complainantName" required>
+					<el-input
+						v-model="addForm.complainantName"
+						placeholder="请输入投诉人姓名"
+						maxlength="50"
+					/>
+				</el-form-item>
+
+				<el-form-item label="联系方式" prop="contact">
+					<el-input
+						v-model="addForm.contact"
+						placeholder="请输入联系电话或邮箱"
+						maxlength="50"
+					/>
+				</el-form-item>
+
+				<el-form-item label="投诉等级" prop="level" required>
+					<el-radio-group v-model="addForm.level">
+						<el-radio
+							v-for="item in report_level"
+							:label="item.label"
+							:value="item.value"
+							:key="item.value"
+						>
+							{{ item.label }}
+						</el-radio>
+					</el-radio-group>
+				</el-form-item>
+
+				<el-form-item label="投诉内容" prop="content" required>
+					<el-input
+						v-model="addForm.content"
+						type="textarea"
+						:rows="4"
+						placeholder="请详细描述投诉内容..."
+						maxlength="500"
+						show-word-limit
+					/>
+				</el-form-item>
+
+				<el-form-item label="指派负责人" prop="assignee">
+
+
+					<el-select
+						v-model="addForm.assignee"
+						placeholder="选择负责人"
+						style="width: 100%"
+						filterable
+						remote
+						:remote-method="(data: string) => loadingUserList(100,data)"
+						:loading="isLoadingUserList"
+						clearable
+					>
+						<el-option
+							v-for="user in userList"
+							:key="user.id"
+							:label="user.userNickname"
+							:value="user.id"
+						/>
+					</el-select>
+				</el-form-item>
+			</el-form>
+
+			<template #footer>
+				<div class="dialog-footer">
+					<el-button @click="handleAddCancel">取消</el-button>
+					<el-button type="primary" @click="handleAddConfirm">
+						<el-icon><Plus /></el-icon>
+						提交投诉
+					</el-button>
+					<el-button @click="handleAddCancel">保存草稿</el-button>
+				</div>
+			</template>
+		</el-dialog>
 	</div>
 </template>
 
@@ -409,5 +594,11 @@ const { state: userList ,isLoading: isLoadingUserList,execute: loadingUserList }
 
 .text-sm {
 	font-size: 12px;
+}
+
+.dialog-footer {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
 }
 </style>
