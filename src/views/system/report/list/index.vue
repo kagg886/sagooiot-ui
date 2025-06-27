@@ -409,6 +409,7 @@ const {loading: createFeedbackLoading, doLoading: createFeedback} = useLoading(a
 	if (result) {
 		ElMessage.success('反馈成功')
 	}
+	handleEditCancel()
 })
 </script>
 
