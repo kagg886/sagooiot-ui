@@ -23,7 +23,7 @@ import { PieChart as PieChartComponent, BarChart, LineChart } from 'echarts/char
 import { TitleComponent, TooltipComponent, LegendComponent, GridComponent } from 'echarts/components'
 import { LabelLayout } from 'echarts/features'
 import { CanvasRenderer } from 'echarts/renderers'
-import { useAsyncState } from '@vueuse/core'
+import { useAsyncState, useEventListener } from '@vueuse/core'
 import { BarSeriesOption, ComposeOption, PieSeriesOption } from 'echarts'
 
 // 注册必须的组件
@@ -125,6 +125,12 @@ onMounted(() => {
 	satisfactionRefMounted.value = true
 })
 
+useEventListener('resize', () => {
+	if (satisfactionChart) {
+		satisfactionChart.resize()
+	}
+})
+
 //异步获取数据
 const {
 	state: statistics,
@@ -159,10 +165,10 @@ const statisticsOption = computed(() => {
 				label: {
 					show: true,
 					position: 'center',
-					formatter: () => `{value|${prepare.satisfactionScore}}\n{unit|/ 5}`,
+					formatter: () => `{value|${prepare.satisfactionScore}%}`,
 					rich: {
 						value: {
-							fontSize: 32,
+							fontSize: 24,
 							fontWeight: 'bold',
 							color: '#52c41a',
 						},
@@ -196,6 +202,12 @@ let typeChart: echarts.ECharts
 onMounted(() => {
 	typeChart = echarts.init(typeDistributionRef.value!)
 	typeDistributionRefMounted.value = true
+})
+
+useEventListener('resize', () => {
+	if (typeChart) {
+		typeChart.resize()
+	}
 })
 
 //异步获取数据
@@ -266,6 +278,11 @@ onMounted(() => {
 	monthTrendChart = echarts.init(monthlyTrendRef.value!)
 	monthlyTrendRefMounted.value = true
 })
+useEventListener('resize', () => {
+	if (monthTrendChart) {
+		monthTrendChart.resize()
+	}
+})
 //异步获取数据
 const { state: monthlyTrendData } = useAsyncState(async () => api.monthlyTrends(), undefined)
 //通过数据和组件挂载状态决定ECOption
@@ -334,6 +351,12 @@ watch(monthlyTrendOption, (newVal) => {
 	}
 })
 
+useEventListener('resize', () => {
+	if (monthTrendChart) {
+		monthTrendChart.resize()
+	}
+})
+
 const areaDistributionRef = ref<HTMLElement>()
 const areaDistributionRefMounted = ref(false)
 let areaChart: echarts.ECharts
@@ -341,6 +364,11 @@ let areaChart: echarts.ECharts
 onMounted(() => {
 	areaChart = echarts.init(areaDistributionRef.value!)
 	areaDistributionRefMounted.value = true
+})
+useEventListener('resize', () => {
+	if (areaChart) {
+		areaChart.resize()
+	}
 })
 //异步获取数据
 const { state: areaDistributionData } = useAsyncState(async () => api.areas(), undefined)
