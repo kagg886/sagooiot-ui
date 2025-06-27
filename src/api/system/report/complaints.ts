@@ -15,7 +15,7 @@ export default {
   add: (data: CreateComplaintRequest) => post('/system/complaint/add', data),
 
   // 获取投诉详情
-  detail: (id: number): Promise<Complaint> => get(`/system/complaint/get`, {id}),
+  detail: (id: number): Promise<Complaint> => get(`/system/complaint/info`, {id}),
 
   // 更新投诉
   edit: (data: UpdateComplaintRequest) => put(`/system/complaint/edit`,data),

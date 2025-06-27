@@ -400,7 +400,7 @@ const {
 			<!-- 表格 -->
 			<el-table :data="tableData" v-loading="loading" @selection-change="handleSelectionChange" style="width: 100%">
 				<el-table-column type="selection" width="55" align="center" />
-				<el-table-column prop="id" label="标识" width="100" align="center">
+				<el-table-column prop="id" label="标识" width="120" align="center">
 					<template #default="{ row }">
 						<div class="flex items-center">
 							<div class="w-2 h-2 bg-blue-500 rounded-full mr-2"></div>
