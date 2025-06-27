@@ -32,11 +32,14 @@ export interface ComplaintQueryParams {
   pageNum?: number;
   pageSize?: number;
 
+	dateRange?: [string, string]; //时间范围
 
   name?: string; //关键词
   status?: string; //状态
   category?: string; //类型
   level?: string; //等级
+
+	orderBy?: 'asc' | 'desc'; //排序方式
 }
 
 // 概要统计数据类型
@@ -52,7 +55,7 @@ export interface OverviewStatistics {
 }
 
 // 投诉类型分布数据类型
-export interface ComplaintTypeDistribution {
+export type ComplaintTypeDistribution = {
   type: string;
   count: number;
   percentage: number;
@@ -60,7 +63,7 @@ export interface ComplaintTypeDistribution {
 }
 
 // 月度趋势数据类型
-export interface MonthlyTrend {
+export type MonthlyTrend = {
   month: string;
   completionRate: number;
   totalCount: number;
@@ -68,13 +71,13 @@ export interface MonthlyTrend {
 }
 
 // 区域分布数据类型
-export interface AreaDistribution {
+export type AreaDistribution = {
   area: ComplaintArea;
   count: number;
   percentage: number;
 }
 
 // 统计查询参数类型
-export interface StatisticsQueryParams {
+export type StatisticsQueryParams = {
   timeRange?: 'week' | 'month' | 'quarter' | 'year';
 }

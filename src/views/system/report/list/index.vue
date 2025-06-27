@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, getCurrentInstance, unref, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, Plus, Delete, Download, View, Edit } from '@element-plus/icons-vue'
+import { Search, Plus, Delete, View, Edit } from '@element-plus/icons-vue'
 import { useLoading } from '/@/utils/loading-util'
 import complaints from '/@/api/system/report/complaints'
 import {
@@ -289,10 +289,6 @@ const handleDelete = async () => {
 	}
 }
 
-const handleExport = () => {
-	ElMessage.info('导出功能开发中...')
-}
-
 // 初始化
 onMounted(() => {
 	getComplaintList()
@@ -397,12 +393,6 @@ const {
 							<Delete />
 						</el-icon>
 						删除
-					</el-button>
-					<el-button @click="handleExport">
-						<el-icon>
-							<Download />
-						</el-icon>
-						导出
 					</el-button>
 				</div>
 			</div>

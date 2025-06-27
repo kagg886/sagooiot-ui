@@ -1,266 +1,224 @@
 <script setup lang="ts">
-import {ref, onMounted, computed} from 'vue'
-import { ElMessage } from 'element-plus'
+import { ref, onMounted, computed, getCurrentInstance, unref, watch } from 'vue'
 import {
-	Document, Clock, CircleCheck, Warning, Timer, TrendCharts,
-	PieChart, Position, List, CaretTop, CaretBottom
+	Document,
+	Clock,
+	CircleCheck,
+	Warning,
+	Timer,
+	TrendCharts,
+	PieChart,
+	Position,
+	List,
+	CaretTop,
+	CaretBottom,
 } from '@element-plus/icons-vue'
-import { useLoading } from '/@/utils/loading-util'
 import api from '/@/api/system/report/statistics'
-import type {
-  OverviewStatistics,
-  ComplaintTypeDistribution,
-  MonthlyTrend,
-  AreaDistribution, StatisticsQueryParams,
-} from '/@/api/system/report/type'
+import report from '/@/api/system/report/complaints'
+import { Complaint, StatisticsQueryParams } from '/@/api/system/report/type'
 
 // 按需引入 ECharts
 import * as echarts from 'echarts/core'
-import {
-	PieChart as PieChartComponent,
-	BarChart,
-	LineChart
-} from 'echarts/charts'
-import {
-	TitleComponent,
-	TooltipComponent,
-	LegendComponent,
-	GridComponent
-} from 'echarts/components'
+import { PieChart as PieChartComponent, BarChart, LineChart } from 'echarts/charts'
+import { TitleComponent, TooltipComponent, LegendComponent, GridComponent } from 'echarts/components'
 import { LabelLayout } from 'echarts/features'
 import { CanvasRenderer } from 'echarts/renderers'
-import {useEventListener, useTimeout} from "@vueuse/core";
-import {delay} from "/@/utils/delay";
+import { useAsyncState } from '@vueuse/core'
+import { BarSeriesOption, ComposeOption, PieSeriesOption } from 'echarts'
 
 // 注册必须的组件
-echarts.use([
-	TitleComponent,
-	TooltipComponent,
-	LegendComponent,
-	GridComponent,
-	PieChartComponent,
-	BarChart,
-	LineChart,
-	LabelLayout,
-	CanvasRenderer
-])
+echarts.use([TitleComponent, TooltipComponent, LegendComponent, GridComponent, PieChartComponent, BarChart, LineChart, LabelLayout, CanvasRenderer])
+
+const { proxy } = getCurrentInstance() as any
+
+//投诉等级，投诉来源，投诉类型
+const {
+	report_level,
+	report_source,
+	report_type,
+}: {
+	[key: string]: Array<{
+		label: string
+		value: string
+	}>
+} = proxy.useDict('report_level', 'report_source', 'report_type')
+
+// eslint-disable-next-line no-unused-vars
+const formatReportLevel = computed<(value: string) => string>(() => {
+	const levels = unref(report_level)
+	return (value: string) => {
+		if (value === undefined) {
+			return '-'
+		}
+		if (levels === undefined) {
+			return '-'
+		}
+		return proxy.selectDictLabel(levels, value)
+	}
+})
+
+// eslint-disable-next-line no-unused-vars
+const formatReportSource = computed<(value: string) => string>(() => {
+	const sources = unref(report_source)
+	return (value: string) => {
+		if (value === undefined) {
+			return '-'
+		}
+		if (sources === undefined) {
+			return '-'
+		}
+		return proxy.selectDictLabel(sources, value)
+	}
+})
+
+// eslint-disable-next-line no-unused-vars
+const formatReportType = computed<(value: string) => string>(() => {
+	const types = unref(report_type)
+	return (value: string) => {
+		if (value === undefined) {
+			return '-'
+		}
+		if (types === undefined) {
+			return '-'
+		}
+		return proxy.selectDictLabel(types, value)
+	}
+})
+
+const formatReportStatus = (value: Complaint['status']) => {
+	let a = '-'
+	switch (value) {
+		case 'completed':
+			a = '已完成'
+			break
+		case 'pending':
+			a = '待处理'
+			break
+		case 'processing':
+			a = '进行中'
+			break
+	}
+	return a
+}
 
 // 响应式数据
+// const typeDistributionData = ref<ComplaintTypeDistribution[]>([])
+// const monthlyTrendData = ref<MonthlyTrend[]>([])
+// const areaDistributionData = ref<AreaDistribution[]>([])
+
+// 统计部分
+
+//表单
 const timeRange = ref<StatisticsQueryParams['timeRange']>('month')
-const statistics = ref<OverviewStatistics>({
-	totalComplaints: 0,
-	pendingComplaints: 0,
-	completedComplaints: 0,
-	urgentComplaints: 0,
-	averageProcessingTime: 0,
-	completionRate: 0,
-	satisfactionScore: 0,
-	satisfactionTotal: 0
+watch(timeRange, (newVal: StatisticsQueryParams['timeRange']) => {
+	getStatistics(100, { timeRange: newVal })
 })
-const typeDistributionData = ref<ComplaintTypeDistribution[]>([])
-const monthlyTrendData = ref<MonthlyTrend[]>([])
-const areaDistributionData = ref<AreaDistribution[]>([])
 
-// DOM 引用
+//数据展示
 const satisfactionRef = ref<HTMLElement>()
-const typeDistributionRef = ref<HTMLElement>()
-const monthlyTrendRef = ref<HTMLElement>()
-const areaDistributionRef = ref<HTMLElement>()
-
-// 图表实例
+const satisfactionRefMounted = ref(false)
 let satisfactionChart: echarts.ECharts
-let typeChart: echarts.ECharts
-let trendChart: echarts.ECharts
-let areaChart: echarts.ECharts
 
-// 计算满意度星级
-const satisfactionStars = computed(() => {
-	return Math.round(statistics.value.satisfactionScore * 10) / 10
+//初始化时挂载echarts
+onMounted(() => {
+	satisfactionChart = echarts.init(satisfactionRef.value!)
+	satisfactionRefMounted.value = true
 })
 
-// 模拟最近投诉数据
-const recentComplaints = ref([
-	{
-		id: '12345',
-		priority: '紧急',
-		type: '污水冒溢',
-		title: '污水冒溢严重影响居民生活',
-		time: '14:30',
-		assignee: '李工程师',
-		status: '处理中'
-	},
-	{
-		id: '12346',
-		priority: '重要',
-		type: '设备故障',
-		title: '电梯故障需要紧急维修',
-		time: '13:45',
-		assignee: '王主管',
-		status: '待处理'
-	},
-	{
-		id: '12347',
-		priority: '一般',
-		type: '环境卫生',
-		title: '小区垃圾清理不及时',
-		time: '12:20',
-		assignee: '张队长',
-		status: '已完成'
-	},
-	{
-		id: '12348',
-		priority: '重要',
-		type: '服务质量',
-		title: '物业服务态度问题',
-		time: '11:15',
-		assignee: '陈经理',
-		status: '处理中'
+//异步获取数据
+const {
+	state: statistics,
+	execute: getStatistics,
+} = useAsyncState(async (range: StatisticsQueryParams) => api.overview(range), undefined)
+
+//通过数据和组件挂载状态决定ECOption
+const statisticsOption = computed(() => {
+	const prepare = statistics.value
+	if (prepare === undefined) {
+		//数据加载必须完成
+		return undefined
 	}
-])
 
-// 获取统计数据
-const { loading: statisticsLoading, doLoading: getStatistics } = useLoading(async () => {
-	const data = await api.overview({ timeRange: timeRange.value })
-		.catch(() => ({
-			totalComplaints: 1234,
-			pendingComplaints: 89,
-			completedComplaints: 1145,
-			urgentComplaints: 23,
-			averageProcessingTime: 2.3,
-			completionRate: 92.8,
-			satisfactionScore: 4.2,
-			satisfactionTotal: 1266
-		}))
-
-	statistics.value = data
-})
-
-// 获取类型分布数据
-const { loading: typeLoading, doLoading: getTypeDistribution } = useLoading(async () => {
-	const data = await api.types()
-		.catch(() => ([
-			{ type: '污水冒溢', count: 456, percentage: 35, trend: 'up' },
-			{ type: '设备故障', count: 342, percentage: 26, trend: 'down' },
-			{ type: '环境卫生', count: 289, percentage: 22, trend: 'up' },
-			{ type: '服务质量', count: 147, percentage: 11, trend: 'up' },
-			{ type: '其它', count: 78, percentage: 6, trend: 'down' }
-		]))
-
-	typeDistributionData.value = data
-})
-
-// 获取月度趋势数据
-const { loading: trendLoading, doLoading: getMonthlyTrend } = useLoading(async () => {
-	const data = await api.monthlyTrends()
-		.catch(() => ([
-			{ month: '1月', completionRate: 91, totalCount: 120, completedCount: 109 },
-			{ month: '2月', completionRate: 93, totalCount: 135, completedCount: 125 },
-			{ month: '3月', completionRate: 94, totalCount: 142, completedCount: 133 },
-			{ month: '4月', completionRate: 93, totalCount: 158, completedCount: 147 },
-			{ month: '5月', completionRate: 94, totalCount: 163, completedCount: 153 },
-			{ month: '6月', completionRate: 93, totalCount: 171, completedCount: 159 }
-		]))
-
-	monthlyTrendData.value = data
-})
-
-// 获取区域分布数据
-const { loading: areaLoading, doLoading: getAreaDistribution } = useLoading(async () => {
-	const data = await api.areas()
-		.catch(() => ([
-			{ area: 'A区' as const, count: 312, percentage: 25 },
-			{ area: 'B区' as const, count: 289, percentage: 23 },
-			{ area: 'A区' as const, count: 267, percentage: 22 },
-			{ area: 'B区' as const, count: 234, percentage: 19 }
-		]))
-
-	areaDistributionData.value = data
-})
-
-// 工具函数
-const getPriorityType = (priority: string) => {
-	switch (priority) {
-		case '紧急': return 'danger'
-		case '重要': return 'warning'
-		case '一般': return 'info'
-		default: return 'info'
+	if (!satisfactionRefMounted.value) {
+		//组件必须被挂载
+		return undefined
 	}
-}
 
-const getStatusType = (status: string) => {
-	switch (status) {
-		case '待处理': return 'info'
-		case '处理中': return 'warning'
-		case '已完成': return 'success'
-		default: return 'info'
-	}
-}
-
-const getTypeColor = (type: string) => {
-	const colors = ['', 'success', 'warning', 'danger', 'info']
-	const index = ['污水冒溢', '设备故障', '环境卫生', '服务质量', '其它'].indexOf(type)
-	return colors[index] || 'info'
-}
-
-// 事件处理
-const handleTimeRangeChange = () => {
-	getStatistics()
-}
-
-const viewAll = () => {
-	ElMessage.info('跳转到投诉列表页面')
-}
-
-// 初始化图表
-const initSatisfactionChart = () => {
-	if (!satisfactionRef.value) return
-
-	satisfactionChart = echarts.init(satisfactionRef.value)
-	const option = {
-		series: [{
-			type: 'pie',
-			radius: ['70%', '90%'],
-			center: ['50%', '50%'],
-			startAngle: 90,
-			endAngle: 450,
-			data: [
-				{ value: statistics.value.satisfactionScore, itemStyle: { color: '#52c41a' }},
-				{ value: 5 - statistics.value.satisfactionScore, itemStyle: { color: '#f0f0f0' }}
-			],
-			label: {
-				show: true,
-				position: 'center',
-				formatter: () => `{value|${statistics.value.satisfactionScore}}\n{unit|/ 5}`,
-				rich: {
-					value: {
-						fontSize: 32,
-						fontWeight: 'bold',
-						color: '#52c41a'
+	const option: ComposeOption<PieSeriesOption> = {
+		series: [
+			{
+				type: 'pie',
+				radius: ['70%', '90%'],
+				center: ['50%', '50%'],
+				startAngle: 90,
+				// endAngle: 450,
+				data: [
+					{ value: prepare.satisfactionScore, itemStyle: { color: '#52c41a' } },
+					{ value: 5 - prepare.satisfactionScore, itemStyle: { color: '#f0f0f0' } },
+				],
+				label: {
+					show: true,
+					position: 'center',
+					formatter: () => `{value|${prepare.satisfactionScore}}\n{unit|/ 5}`,
+					rich: {
+						value: {
+							fontSize: 32,
+							fontWeight: 'bold',
+							color: '#52c41a',
+						},
+						unit: {
+							fontSize: 14,
+							color: '#666',
+						},
 					},
-					unit: {
-						fontSize: 14,
-						color: '#666'
-					}
-				}
+				},
+				labelLine: { show: false },
+				silent: true,
 			},
-			labelLine: { show: false },
-			silent: true
-		}]
+		],
 	}
-	satisfactionChart.setOption(option)
-}
 
-const initTypeDistributionChart = () => {
-	if (!typeDistributionRef.value) return
+	return option
+})
+watch(statisticsOption, (newVal) => {
+	if (newVal !== undefined) {
+		satisfactionChart.setOption(newVal)
+	}
+})
+const satisfactionStars = computed(() => {
+	return Math.round((statistics.value?.satisfactionScore ?? 0) * 10) / 10
+})
 
-	typeChart = echarts.init(typeDistributionRef.value)
-	const colors = ['#4285f4', '#ea4335', '#fbbc05', '#34a853', '#9aa0a6']
+const typeDistributionRef = ref<HTMLElement>()
+const typeDistributionRefMounted = ref(false)
+let typeChart: echarts.ECharts
+//初始化时挂载echarts
+onMounted(() => {
+	typeChart = echarts.init(typeDistributionRef.value!)
+	typeDistributionRefMounted.value = true
+})
 
-	const option = {
-		color: colors,
+//异步获取数据
+const { state: typeDistributionData } = useAsyncState(async () => api.types(), undefined)
+
+//通过数据和组件挂载状态决定ECOption
+const typeDistributionOption = computed(() => {
+	const prepare = typeDistributionData.value
+	if (prepare === undefined) {
+		//数据加载必须完成
+		return undefined
+	}
+	if (!typeDistributionRefMounted.value) {
+		//组件必须被挂载
+		return undefined
+	}
+
+	const report_type_impl = unref(report_type)
+
+	const option: ComposeOption<PieSeriesOption> = {
 		tooltip: {
 			trigger: 'item',
-			formatter: '{b}: {c} ({d}%)'
+			formatter: '{b}: {c} ({d}%)',
 		},
 		legend: {
 			type: 'scroll',
@@ -268,46 +226,72 @@ const initTypeDistributionChart = () => {
 			right: '5%',
 			top: 'center',
 			itemGap: 20,
-			textStyle: { fontSize: 12 }
+			textStyle: { fontSize: 12 },
 		},
-		series: [{
-			type: 'pie',
-			radius: ['0%', '60%'],
-			center: ['35%', '50%'],
-			data: typeDistributionData.value.map(item => ({
-				name: item.type,
-				value: item.count
-			})),
-			label: { show: false },
-			emphasis: {
-				itemStyle: {
-					shadowBlur: 10,
-					shadowOffsetX: 0,
-					shadowColor: 'rgba(0, 0, 0, 0.5)'
-				}
-			}
-		}]
+		series: [
+			{
+				type: 'pie',
+				radius: ['0%', '60%'],
+				center: ['35%', '50%'],
+				data: prepare.map((item) => ({
+					name: proxy.selectDictLabel(report_type_impl, item.type),
+					value: item.count,
+				})),
+				label: { show: false },
+				emphasis: {
+					itemStyle: {
+						shadowBlur: 10,
+						shadowOffsetX: 0,
+						shadowColor: 'rgba(0, 0, 0, 0.5)',
+					},
+				},
+			},
+		],
 	}
-	typeChart.setOption(option)
-}
 
-const initMonthlyTrendChart = () => {
-	if (!monthlyTrendRef.value) return
+	return option
+})
 
-	trendChart = echarts.init(monthlyTrendRef.value)
-	const option = {
+watch(typeDistributionOption, (newVal) => {
+	if (newVal !== undefined) {
+		typeChart.setOption(newVal)
+	}
+})
+
+const monthlyTrendRef = ref<HTMLElement>()
+const monthlyTrendRefMounted = ref(false)
+let monthTrendChart: echarts.ECharts
+//初始化时挂载echarts
+onMounted(() => {
+	monthTrendChart = echarts.init(monthlyTrendRef.value!)
+	monthlyTrendRefMounted.value = true
+})
+//异步获取数据
+const { state: monthlyTrendData } = useAsyncState(async () => api.monthlyTrends(), undefined)
+//通过数据和组件挂载状态决定ECOption
+const monthlyTrendOption = computed(() => {
+	const prepare = monthlyTrendData.value
+	if (prepare === undefined) {
+		//数据加载必须完成
+		return undefined
+	}
+	if (!monthlyTrendRefMounted.value) {
+		//组件必须被挂载
+		return undefined
+	}
+	const option: ComposeOption<BarSeriesOption> = {
 		tooltip: {
 			trigger: 'axis',
 			formatter: (params: any) => {
 				const data = params[0]
 				return `${data.name}<br/>完成率: ${data.value}%`
-			}
+			},
 		},
 		xAxis: {
 			type: 'category',
-			data: monthlyTrendData.value.map(item => item.month),
+			data: prepare.map((item) => item.month),
 			axisLine: { show: false },
-			axisTick: { show: false }
+			axisTick: { show: false },
 		},
 		yAxis: {
 			type: 'value',
@@ -318,45 +302,71 @@ const initMonthlyTrendChart = () => {
 			splitLine: {
 				lineStyle: {
 					color: '#f0f0f0',
-					type: 'dashed'
-				}
-			}
+					type: 'dashed',
+				},
+			},
 		},
 		grid: {
 			left: '3%',
 			right: '4%',
 			bottom: '3%',
 			top: '3%',
-			containLabel: true
+			containLabel: true,
 		},
-		series: [{
-			type: 'bar',
-			data: monthlyTrendData.value.map(item => item.completionRate),
-			itemStyle: {
-				color: '#000',
-				borderRadius: [2, 2, 0, 0]
+		series: [
+			{
+				type: 'bar',
+				data: prepare.map((item) => item.completionRate),
+				itemStyle: {
+					color: '#000',
+					borderRadius: [2, 2, 0, 0],
+				},
+				barWidth: '60%',
 			},
-			barWidth: '60%'
-		}]
+		],
 	}
-	trendChart.setOption(option)
-}
+	return option
+})
 
-const initAreaDistributionChart = () => {
-	if (!areaDistributionRef.value) return
+watch(monthlyTrendOption, (newVal) => {
+	if (newVal !== undefined) {
+		monthTrendChart.setOption(newVal)
+	}
+})
 
-	areaChart = echarts.init(areaDistributionRef.value)
-	const option = {
+const areaDistributionRef = ref<HTMLElement>()
+const areaDistributionRefMounted = ref(false)
+let areaChart: echarts.ECharts
+//初始化时挂载echarts
+onMounted(() => {
+	areaChart = echarts.init(areaDistributionRef.value!)
+	areaDistributionRefMounted.value = true
+})
+//异步获取数据
+const { state: areaDistributionData } = useAsyncState(async () => api.areas(), undefined)
+//通过数据和组件挂载状态决定ECOption
+const areaDistributionOption = computed(() => {
+	const prepare = areaDistributionData.value
+	if (prepare === undefined) {
+		//数据加载必须完成
+		return undefined
+	}
+	if (!areaDistributionRefMounted.value) {
+		//组件必须被挂载
+		return undefined
+	}
+
+	const option: ComposeOption<BarSeriesOption> = {
 		tooltip: {
 			trigger: 'axis',
-			axisPointer: { type: 'shadow' }
+			axisPointer: { type: 'shadow' },
 		},
 		grid: {
 			left: '3%',
 			right: '4%',
 			bottom: '3%',
 			top: '3%',
-			containLabel: true
+			containLabel: true,
 		},
 		xAxis: {
 			type: 'value',
@@ -365,55 +375,38 @@ const initAreaDistributionChart = () => {
 			splitLine: {
 				lineStyle: {
 					color: '#f0f0f0',
-					type: 'dashed'
-				}
-			}
+					type: 'dashed',
+				},
+			},
 		},
 		yAxis: {
 			type: 'category',
-			data: areaDistributionData.value.map(item => item.area),
+			data: prepare.map(item => item.area),
 			axisLine: { show: false },
-			axisTick: { show: false }
+			axisTick: { show: false },
 		},
 		series: [{
 			type: 'bar',
-			data: areaDistributionData.value.map(item => ({
+			data: prepare.map(item => ({
 				value: item.count,
-				itemStyle: { color: '#666' }
+				itemStyle: { color: '#666' },
 			})),
 			barWidth: '50%',
 			itemStyle: {
-				borderRadius: [0, 2, 2, 0]
-			}
-		}]
+				borderRadius: [0, 2, 2, 0],
+			},
+		}],
 	}
-	areaChart.setOption(option)
-}
-// 初始化
-onMounted(async () => {
-	// 获取数据
-	await Promise.all([
-		getStatistics(),
-		getTypeDistribution(),
-		getMonthlyTrend(),
-		getAreaDistribution()
-	])
-
-  await delay(1000)
-
-  initSatisfactionChart()
-  initTypeDistributionChart()
-  initMonthlyTrendChart()
-  initAreaDistributionChart()
+	return option
+})
+watch(areaDistributionOption, (newVal) => {
+	if (newVal!== undefined) {
+		areaChart.setOption(newVal)
+	}
 })
 
+const {state: recentComplaints} = useAsyncState<Complaint[]>(async () => report.getList({orderBy: 'desc'}).then((res: {list: Complaint[]})=>res.list),[])
 
-useEventListener('resize', () => {
-  satisfactionChart?.resize()
-  typeChart?.resize()
-  trendChart?.resize()
-  areaChart?.resize()
-})
 </script>
 
 <template>
@@ -437,7 +430,7 @@ useEventListener('resize', () => {
 				</el-select>
 			</div>
 
-						<!-- 统计卡片区域 -->
+			<!-- 统计卡片区域 -->
 			<el-row :gutter="16" class="mb-6">
 				<!-- 满意度评分 - 占满一列 -->
 				<el-col :xs="24" :sm="24" :md="6" :lg="6" :xl="6" class="satisfaction-col">
@@ -445,16 +438,9 @@ useEventListener('resize', () => {
 						<div class="satisfaction-circle" ref="satisfactionRef"></div>
 						<div class="satisfaction-info">
 							<div class="satisfaction-title">整体满意度</div>
-							<div class="satisfaction-subtitle">基于 {{ statistics.satisfactionTotal }} 份反馈</div>
+							<div class="satisfaction-subtitle">基于 {{ statistics?.satisfactionTotal ?? 0 }} 份反馈</div>
 							<div class="satisfaction-stars">
-								<el-rate
-									v-model="satisfactionStars"
-									disabled
-									show-score
-									text-color="#ff9900"
-									score-template="{value}"
-									:max="5"
-								/>
+								<el-rate v-model="satisfactionStars" disabled show-score text-color="#ff9900" score-template="{value}" :max="5" />
 							</div>
 							<div class="satisfaction-trend">较上月 +0.3</div>
 						</div>
@@ -468,13 +454,17 @@ useEventListener('resize', () => {
 						<el-col :xs="24" :sm="12" :md="8" :lg="8" :xl="8">
 							<div class="stat-card">
 								<div class="stat-icon">
-									<el-icon size="24" color="#409eff"><Document /></el-icon>
+									<el-icon size="24" color="#409eff">
+										<Document />
+									</el-icon>
 								</div>
 								<div class="stat-content">
 									<div class="stat-label">总投诉</div>
-									<div class="stat-value">{{ statistics.totalComplaints.toLocaleString() }}</div>
+									<div class="stat-value">{{ statistics?.totalComplaints?.toLocaleString() ?? '-' }}</div>
 									<div class="stat-trend positive">
-										<el-icon><CaretTop /></el-icon>
+										<el-icon>
+											<CaretTop />
+										</el-icon>
 										+12%
 									</div>
 								</div>
@@ -485,13 +475,17 @@ useEventListener('resize', () => {
 						<el-col :xs="24" :sm="12" :md="8" :lg="8" :xl="8">
 							<div class="stat-card">
 								<div class="stat-icon">
-									<el-icon size="24" color="#e6a23c"><Clock /></el-icon>
+									<el-icon size="24" color="#e6a23c">
+										<Clock />
+									</el-icon>
 								</div>
 								<div class="stat-content">
 									<div class="stat-label">待处理</div>
-									<div class="stat-value">{{ statistics.pendingComplaints }}</div>
+									<div class="stat-value">{{ statistics?.pendingComplaints ?? '-' }}</div>
 									<div class="stat-trend negative">
-										<el-icon><CaretBottom /></el-icon>
+										<el-icon>
+											<CaretBottom />
+										</el-icon>
 										-5%
 									</div>
 								</div>
@@ -502,13 +496,17 @@ useEventListener('resize', () => {
 						<el-col :xs="24" :sm="12" :md="8" :lg="8" :xl="8">
 							<div class="stat-card">
 								<div class="stat-icon">
-									<el-icon size="24" color="#67c23a"><CircleCheck /></el-icon>
+									<el-icon size="24" color="#67c23a">
+										<CircleCheck />
+									</el-icon>
 								</div>
 								<div class="stat-content">
 									<div class="stat-label">已完成</div>
-									<div class="stat-value">{{ statistics.completedComplaints.toLocaleString() }}</div>
+									<div class="stat-value">{{ statistics?.completedComplaints?.toLocaleString() ?? '-' }}</div>
 									<div class="stat-trend positive">
-										<el-icon><CaretTop /></el-icon>
+										<el-icon>
+											<CaretTop />
+										</el-icon>
 										+18%
 									</div>
 								</div>
@@ -519,13 +517,17 @@ useEventListener('resize', () => {
 						<el-col :xs="24" :sm="12" :md="8" :lg="8" :xl="8">
 							<div class="stat-card">
 								<div class="stat-icon">
-									<el-icon size="24" color="#f56c6c"><Warning /></el-icon>
+									<el-icon size="24" color="#f56c6c">
+										<Warning />
+									</el-icon>
 								</div>
 								<div class="stat-content">
 									<div class="stat-label">紧急</div>
-									<div class="stat-value">{{ statistics.urgentComplaints }}</div>
+									<div class="stat-value">{{ statistics?.urgentComplaints ?? '-' }}</div>
 									<div class="stat-trend positive">
-										<el-icon><CaretTop /></el-icon>
+										<el-icon>
+											<CaretTop />
+										</el-icon>
 										+3%
 									</div>
 								</div>
@@ -536,13 +538,17 @@ useEventListener('resize', () => {
 						<el-col :xs="24" :sm="12" :md="8" :lg="8" :xl="8">
 							<div class="stat-card">
 								<div class="stat-icon">
-									<el-icon size="24" color="#909399"><Timer /></el-icon>
+									<el-icon size="24" color="#909399">
+										<Timer />
+									</el-icon>
 								</div>
 								<div class="stat-content">
 									<div class="stat-label">处理时间</div>
-									<div class="stat-value">{{ statistics.averageProcessingTime }}天</div>
+									<div class="stat-value">{{ statistics?.averageProcessingTime ?? '-' }}天</div>
 									<div class="stat-trend negative">
-										<el-icon><CaretBottom /></el-icon>
+										<el-icon>
+											<CaretBottom />
+										</el-icon>
 										-0.5天
 									</div>
 								</div>
@@ -553,13 +559,17 @@ useEventListener('resize', () => {
 						<el-col :xs="24" :sm="12" :md="8" :lg="8" :xl="8">
 							<div class="stat-card">
 								<div class="stat-icon">
-									<el-icon size="24" color="#409eff"><TrendCharts /></el-icon>
+									<el-icon size="24" color="#409eff">
+										<TrendCharts />
+									</el-icon>
 								</div>
 								<div class="stat-content">
 									<div class="stat-label">完成率</div>
-									<div class="stat-value">{{ statistics.completionRate }}%</div>
+									<div class="stat-value">{{ statistics?.completionRate ?? '-' }}%</div>
 									<div class="stat-trend positive">
-										<el-icon><CaretTop /></el-icon>
+										<el-icon>
+											<CaretTop />
+										</el-icon>
 										+2.1%
 									</div>
 								</div>
@@ -575,7 +585,9 @@ useEventListener('resize', () => {
 				<el-col :xs="24" :sm="24" :md="8" :lg="8" :xl="8">
 					<div class="chart-card">
 						<div class="chart-title">
-							<el-icon><PieChart /></el-icon>
+							<el-icon>
+								<PieChart />
+							</el-icon>
 							投诉类型分布
 						</div>
 						<div class="chart-container" ref="typeDistributionRef"></div>
@@ -586,7 +598,9 @@ useEventListener('resize', () => {
 				<el-col :xs="24" :sm="24" :md="8" :lg="8" :xl="8">
 					<div class="chart-card">
 						<div class="chart-title">
-							<el-icon><TrendCharts /></el-icon>
+							<el-icon>
+								<TrendCharts />
+							</el-icon>
 							月度完成率趋势
 						</div>
 						<div class="chart-container" ref="monthlyTrendRef"></div>
@@ -597,7 +611,9 @@ useEventListener('resize', () => {
 				<el-col :xs="24" :sm="24" :md="8" :lg="8" :xl="8">
 					<div class="chart-card">
 						<div class="chart-title">
-							<el-icon><Position /></el-icon>
+							<el-icon>
+								<Position />
+							</el-icon>
 							区域分布
 						</div>
 						<div class="chart-container" ref="areaDistributionRef"></div>
@@ -609,7 +625,9 @@ useEventListener('resize', () => {
 			<div class="recent-complaints">
 				<div class="flex justify-between items-center mb-4">
 					<div class="section-title">
-						<el-icon><List /></el-icon>
+						<el-icon>
+							<List />
+						</el-icon>
 						最近投诉动态
 					</div>
 					<el-button type="primary" link @click="viewAll">查看全部</el-button>
@@ -619,20 +637,17 @@ useEventListener('resize', () => {
 					<div v-for="complaint in recentComplaints" :key="complaint.id" class="complaint-item">
 						<div class="complaint-id">
 							<span class="id-text">#{{ complaint.id }}</span>
-							<el-tag :type="getPriorityType(complaint.priority)" size="small">
-								{{ complaint.priority }}
-							</el-tag>
-							<el-tag :type="getTypeColor(complaint.type)" size="small">
-								{{ complaint.type }}
+							<el-tag size="small">
+								{{ formatReportLevel(complaint.level) }}
 							</el-tag>
 						</div>
 						<div class="complaint-title">{{ complaint.title }}</div>
 						<div class="complaint-meta">
-							<span class="complaint-time">{{ complaint.time }}</span>
+							<span class="complaint-time">{{ complaint.createdAt }}</span>
 							<span class="complaint-assignee">{{ complaint.assignee }}</span>
 							<div class="complaint-actions">
-								<el-tag :type="getStatusType(complaint.status)" size="small">
-									{{ complaint.status }}
+								<el-tag size="small">
+									{{ formatReportStatus(complaint.status) }}
 								</el-tag>
 								<el-button type="primary" link size="small">详情</el-button>
 							</div>
@@ -888,7 +903,7 @@ useEventListener('resize', () => {
 	}
 
 	// 第二行卡片（紧急、处理时间、完成率）添加上边距
-	.el-col:nth-child(n+4) {
+	.el-col:nth-child(n + 4) {
 		@media (min-width: 768px) {
 			.stat-card {
 				margin-top: 5px;
