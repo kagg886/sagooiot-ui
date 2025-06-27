@@ -14,7 +14,7 @@ const { related_level }: {
 		label: string
 		value: string
 	}>
-} = proxy.useDict('report_level')
+} = proxy.useDict('related_level')
 
 // eslint-disable-next-line no-unused-vars
 const formatRelatedLevel = computed<(value: string) => string>(() => {
@@ -38,14 +38,14 @@ const params = ref<FeedbackQueryParams>({
 })
 
 const {state, isLoading, execute} = useAsyncState(
-	feedback.list(params.value),
+	async () => feedback.list(params.value),
 	{total: 0, list: []}
 )
 
 // 查询
 const handleQuery = () => {
 	params.value.pageNum = 1
-	execute(100)
+	execute()
 }
 
 // 重置查询
@@ -57,14 +57,14 @@ const resetQuery = () => {
 		pageNum: 1,
 		pageSize: 10,
 	}
-	execute(100)
+	execute()
 }
 
 // 分页改变
 const handlePagination = ({ page, limit }: { page: number; limit: number }) => {
 	params.value.pageNum = page
 	params.value.pageSize = limit
-	execute(100)
+	execute()
 }
 
 // 删除操作
@@ -142,7 +142,6 @@ const handleDelete = (row: any) => {
 							text
 							type="danger"
 							@click="handleDelete(scope.row)"
-							v-auth="'del'"
 						>
 							删除
 						</el-button>
