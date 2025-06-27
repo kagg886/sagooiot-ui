@@ -5,46 +5,26 @@ export type ComplaintArea = 'A区' | 'B区'
 export interface Complaint {
   id: number;
   title: string;
-  content?: string;
-  type: string;
+  category: string;
   source: string;
-  priority: string;
-  status: string;
-  complainantName: string;
-  contact?: string;
-  area: ComplaintArea;
-  assignee: string;
-  satisfaction?: number | null;
-  created_at: string;
-  updated_at: string;
-  processing_notes?: string;
-}
-
-// 投诉列表项类型（用于列表显示）
-export type ComplaintListItem = {
-	id: number;
-	title: string;
-	category: string; //来自字典：report_type
-	source: string; //来自字典：report_source
-	level: string; //来自字典：report_level
-	content: string;
-	status: 'pending' | 'processing' | 'completed';
-	contact: string;
-	complainantName: string;
 	area: ComplaintArea;
-	assignee: string;
-	updatedAt: string;
+	complainantName: string;
+	contact?: string;
+	level: string;
+	content: string;
+	assignee: number;
+	status: string;
+
+  createdAt: string;
+  updatedAt: string;
 }
 
-export type CreateComplaintRequest = Pick<ComplaintListItem, 'title' | 'category' | 'source' | 'area' | 'complainantName' | 'contact' | 'level' | 'content'> & {
-	assignee?: number;
+export type CreateComplaintRequest = Pick<Complaint, 'title' | 'category' | 'source' | 'area' | 'complainantName' | 'contact' | 'level' | 'content'> & {
+	assignee?: number | null;
 }
 // 更新投诉请求类型
-export interface UpdateComplaintRequest {
-  title?: string;
-  status?: string;
-  assignee?: string;
-  processing_notes?: string;
+export type UpdateComplaintRequest = CreateComplaintRequest & {
+  id: number;
 }
 
 // 投诉查询参数类型
