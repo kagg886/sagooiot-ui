@@ -5,13 +5,19 @@ import { Search, Plus, Delete, Download, View, Edit } from '@element-plus/icons-
 import { useLoading } from '/@/utils/loading-util'
 import complaints from '/@/api/system/report/complaints'
 import type { ComplaintListItem, ComplaintQueryParams } from '/@/api/system/report/type'
+import system from '/@/api/system'
+import { useAsyncState } from '@vueuse/core'
 
 const { proxy } = getCurrentInstance() as any
 
 //投诉等级，投诉来源，投诉类型
-const { report_level, report_source, report_type }: {
-	[key:string]: Array<{
-		label: string,
+const {
+	report_level,
+	report_source,
+	report_type,
+}: {
+	[key: string]: Array<{
+		label: string
 		value: string
 	}>
 } = proxy.useDict('report_level', 'report_source', 'report_type')
@@ -77,7 +83,7 @@ const formatReportStatus = (value: ComplaintListItem['status']) => {
 // 响应式数据
 const tableData = ref<ComplaintListItem[]>([])
 const total = ref(0)
-const selectedIds = ref<string[]>([])
+const selectedIds = ref<number[]>([])
 const queryRef = ref()
 
 // 查询参数
@@ -104,13 +110,9 @@ const handleSearch = () => {
 	getComplaintList()
 }
 
-const handleSizeChange = (size: number) => {
-	queryParams.value.pageSize = size
-	getComplaintList()
-}
-
-const handleCurrentChange = (page: number) => {
+const handlePageChange = ({page,limit}: {page: number, limit: number}) => {
 	queryParams.value.pageNum = page
+	queryParams.value.pageSize = limit
 	getComplaintList()
 }
 
@@ -142,9 +144,9 @@ const handleDeleteSingle = async (row: ComplaintListItem) => {
 	}
 
 	const result = await complaints
-		.del(row.id)
-		.then(()=>true)
-		.catch(()=>false)
+		.del([row.id])
+		.then(() => true)
+		.catch(() => false)
 
 	if (result) {
 		ElMessage.success('删除成功')
@@ -152,25 +154,31 @@ const handleDeleteSingle = async (row: ComplaintListItem) => {
 	}
 }
 
-const handleDelete = () => {
+const handleDelete = async () => {
 	if (selectedIds.value.length === 0) {
 		ElMessage.warning('请选择要删除的数据')
 		return
 	}
 
-	ElMessageBox.confirm(`确定要删除选中的 ${selectedIds.value.length} 条投诉吗？`, '提示', {
+	const status = await ElMessageBox.confirm(`确定要删除选中的 ${selectedIds.value.length} 条投诉吗？`, '提示', {
 		confirmButtonText: '确定',
 		cancelButtonText: '取消',
 		type: 'warning',
 	})
-		.then(() => {
-			ElMessage.success('批量删除成功')
-			selectedIds.value = []
-			getComplaintList()
-		})
-		.catch(() => {
-			// 用户取消删除
-		})
+
+	if (status!== 'confirm') {
+		return
+	}
+
+	const result = await complaints
+		.del(selectedIds.value)
+		.then(() => true)
+		.catch(() => false)
+
+	if (result) {
+		ElMessage.success('删除成功')
+		await getComplaintList()
+	}
 }
 
 const handleExport = () => {
@@ -181,6 +189,22 @@ const handleExport = () => {
 onMounted(() => {
 	getComplaintList()
 })
+
+type SimpleUser = {
+	id: number
+	userNickname: string
+}
+
+//用户获取
+const { state: userList ,isLoading: isLoadingUserList,execute: loadingUserList } = useAsyncState<SimpleUser[]>(async (name: string) => {
+	const data = await system.user.getList({ keyWords: name }).catch(() => undefined)
+
+	if (data === undefined) {
+		return []
+	}
+
+	return data.list
+}, [])
 </script>
 
 <template>
@@ -209,7 +233,7 @@ onMounted(() => {
 				<el-form-item>
 					<el-select v-model="queryParams.category" placeholder="分类" style="width: 120px">
 						<el-option label="全部" value="" />
-						<el-option v-for="i in report_type" :label="i.label" :value="i.value" :key="i.value"/>
+						<el-option v-for="i in report_type" :label="i.label" :value="i.value" :key="i.value" />
 					</el-select>
 				</el-form-item>
 				<el-form-item>
@@ -306,19 +330,8 @@ onMounted(() => {
 				</el-table-column>
 			</el-table>
 
-			<!-- 分页 -->
-			<div class="flex justify-between items-center mt-4">
-				<div class="text-sm text-gray-500">共 {{ total }} 条</div>
-				<el-pagination
-					v-model:current-page="queryParams.pageNum"
-					v-model:page-size="queryParams.pageSize"
-					:page-sizes="[10, 20, 50, 100]"
-					:total="total"
-					layout="sizes, prev, pager, next, jumper"
-					@size-change="handleSizeChange"
-					@current-change="handleCurrentChange"
-				/>
-			</div>
+			<pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="handlePageChange" />
+
 		</el-card>
 	</div>
 </template>
