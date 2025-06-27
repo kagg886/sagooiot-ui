@@ -4,11 +4,12 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Plus, Delete, View, Edit } from '@element-plus/icons-vue'
 import { useLoading } from '/@/utils/loading-util'
 import complaints from '/@/api/system/report/complaints'
+import feedback_api from '/@/api/system/report/feedback'
 import {
 	ComplaintQueryParams,
 	CreateComplaintRequest,
 	ComplaintArea,
-	UpdateComplaintRequest, Complaint,
+	UpdateComplaintRequest, Complaint, FeedbackCreateParams,
 } from '/@/api/system/report/type'
 import system from '/@/api/system'
 import { useAsyncState } from '@vueuse/core'
@@ -332,6 +333,83 @@ const {
 		return data
 	}
 }, [])
+
+
+const feedback = ref(false)
+const feedFormRef = ref()
+const feedCreateForm = ref<FeedbackCreateParams>({
+	contactInfo: '',
+	investigatorName: '',
+	surveyCode: '',
+	ticketNo: 0,
+	processingSpeed: '',
+	staffAttitude: '',
+	resolutionEffect: '',
+	otherSuggestions: ''
+})
+
+// 反馈表单验证规则
+const feedFormRules = {
+	surveyCode: [{ required: true, message: '请输入问卷编号', trigger: 'blur' }],
+	investigatorName: [{ required: true, message: '请输入调查者姓名', trigger: 'blur' }],
+	contactInfo: [
+		{ required: true, message: '请输入联系信息', trigger: 'blur' },
+		{ pattern: /^(1[3-9]\d{9}|[\w.-]+@[\w.-]+\.\w+)$/, message: '请输入正确的手机号或邮箱', trigger: 'blur' }
+	],
+	processingSpeed: [{ required: true, message: '请选择处理速度评价', trigger: 'change' }],
+	staffAttitude: [{ required: true, message: '请选择工作人员态度评价', trigger: 'change' }],
+	resolutionEffect: [{ required: true, message: '请选择解决效果评价', trigger: 'change' }],
+}
+
+//投诉等级，投诉来源，投诉类型
+const { related_level }: {
+	[key: string]: Array<{
+		label: string
+		value: string
+	}>
+} = proxy.useDict('related_level')
+
+
+const handleFeedback = (row: Complaint) => {
+	// 重置表单
+	feedFormRef.value?.resetFields()
+	// 设置投诉编号（不可修改）
+	feedCreateForm.value.ticketNo = row.id
+	// 清空其他字段
+	feedCreateForm.value = {
+		...feedCreateForm.value,
+		contactInfo: '',
+		investigatorName: '',
+		surveyCode: '',
+		processingSpeed: '',
+		staffAttitude: '',
+		resolutionEffect: '',
+		otherSuggestions: ''
+	}
+	feedback.value = true
+}
+
+// 取消反馈
+const handleFeedbackCancel = () => {
+	feedback.value = false
+	feedFormRef.value?.resetFields()
+}
+
+const {loading: createFeedbackLoading, doLoading: createFeedback} = useLoading(async () => {
+	const valid = await feedFormRef.value?.validate().catch(() => false)
+	if (!valid) {
+		return
+	}
+
+	const result = await feedback_api
+		.create(feedCreateForm.value)
+		.then(() => true)
+		.catch(() => false)
+
+	if (result) {
+		ElMessage.success('反馈成功')
+	}
+})
 </script>
 
 <template>
@@ -427,7 +505,7 @@ const {
 				</el-table-column>
 				<el-table-column prop="updatedAt" label="最后更新时间" width="180" align="center" />
 				<el-table-column prop="assignee" label="分配给" width="120" align="center" />
-				<el-table-column label="操作" width="200" align="center" fixed="right">
+				<el-table-column label="操作" width="260" align="center" fixed="right">
 					<template #default="{ row }: {row: Complaint}">
 						<el-button size="small" type="primary" link @click="handleDetail(row)">
 							<el-icon>
@@ -446,6 +524,13 @@ const {
 								<Delete />
 							</el-icon>
 							删除
+						</el-button>
+
+						<el-button size="small" type="info" link @click="handleFeedback(row)">
+							<el-icon>
+								<Search />
+							</el-icon>
+							反馈
 						</el-button>
 					</template>
 				</el-table-column>
@@ -596,6 +681,66 @@ const {
 						提交修改
 					</el-button>
 					<el-button @click="handleEditCancel">保存草稿</el-button>
+				</div>
+			</template>
+		</el-dialog>
+
+		<!-- 反馈对话框 -->
+		<el-dialog v-model="feedback" title="投诉反馈" width="600px" :close-on-click-modal="false">
+			<el-form ref="feedFormRef" :model="feedCreateForm" :rules="feedFormRules" label-width="120px" label-position="left">
+				<el-form-item label="问卷编号" prop="surveyCode" required>
+					<el-input v-model="feedCreateForm.surveyCode" placeholder="请输入问卷编号" maxlength="50" />
+				</el-form-item>
+
+				<el-form-item label="投诉编号" prop="ticketNo">
+					<el-input v-model="feedCreateForm.ticketNo" placeholder="投诉编号" disabled />
+				</el-form-item>
+
+				<el-form-item label="调查者姓名" prop="investigatorName" required>
+					<el-input v-model="feedCreateForm.investigatorName" placeholder="请输入调查者姓名" maxlength="50" />
+				</el-form-item>
+
+				<el-form-item label="联系信息" prop="contactInfo" required>
+					<el-input v-model="feedCreateForm.contactInfo" placeholder="请输入联系电话或邮箱" maxlength="100" />
+				</el-form-item>
+
+				<el-form-item label="处理速度" prop="processingSpeed" required>
+					<el-select v-model="feedCreateForm.processingSpeed" placeholder="请选择处理速度评价" style="width: 100%">
+						<el-option v-for="item in related_level" :key="item.value" :label="item.label" :value="item.value" />
+					</el-select>
+				</el-form-item>
+
+				<el-form-item label="工作人员态度" prop="staffAttitude" required>
+					<el-select v-model="feedCreateForm.staffAttitude" placeholder="请选择工作人员态度评价" style="width: 100%">
+						<el-option v-for="item in related_level" :key="item.value" :label="item.label" :value="item.value" />
+					</el-select>
+				</el-form-item>
+
+				<el-form-item label="解决效果" prop="resolutionEffect" required>
+					<el-select v-model="feedCreateForm.resolutionEffect" placeholder="请选择解决效果评价" style="width: 100%">
+						<el-option v-for="item in related_level" :key="item.value" :label="item.label" :value="item.value" />
+					</el-select>
+				</el-form-item>
+
+				<el-form-item label="其他建议" prop="otherSuggestions">
+					<el-input
+						v-model="feedCreateForm.otherSuggestions"
+						type="textarea"
+						:rows="4"
+						placeholder="请输入其他建议..."
+						maxlength="500"
+						show-word-limit
+					/>
+				</el-form-item>
+			</el-form>
+
+			<template #footer>
+				<div class="dialog-footer">
+					<el-button @click="handleFeedbackCancel">取消</el-button>
+					<el-button type="primary" @click="createFeedback" :loading="createFeedbackLoading">
+						<el-icon><Plus /></el-icon>
+						提交反馈
+					</el-button>
 				</div>
 			</template>
 		</el-dialog>

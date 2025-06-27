@@ -2,7 +2,7 @@
 import feedback from '/@/api/system/report/feedback'
 import { computed, getCurrentInstance, ref, unref } from 'vue'
 import { useAsyncState } from '@vueuse/core'
-import { FeedbackQueryParams } from '/@/api/system/report/type'
+import { Feedback, FeedbackQueryParams } from '/@/api/system/report/type'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 
@@ -68,7 +68,7 @@ const handlePagination = ({ page, limit }: { page: number; limit: number }) => {
 }
 
 // 删除操作
-const handleDelete = (row: any) => {
+const handleDelete = (row: Feedback) => {
 	ElMessageBox.confirm(`此操作将永久删除问卷编号："${row.surveyCode}"的反馈，是否继续?`, '提示', {
 		confirmButtonText: '确认',
 		cancelButtonText: '取消',
@@ -81,6 +81,41 @@ const handleDelete = (row: any) => {
 			})
 		})
 		.catch(() => {})
+}
+
+const deleteIds = ref<number[]>([])
+
+// 表格选择改变事件
+const handleSelectionChange = (selection: Feedback[]) => {
+	deleteIds.value = selection.map(item => item.id)
+}
+
+// 批量删除
+const handleBatchDelete = async () => {
+	if (deleteIds.value.length === 0) {
+		ElMessage.warning('请选择要删除的数据')
+		return
+	}
+
+	const action = await ElMessageBox.confirm(`确定要删除选中的 ${deleteIds.value.length} 条反馈吗？`, '提示', {
+		confirmButtonText: '确认',
+		cancelButtonText: '取消',
+		type: 'warning',
+	}).catch(() => 'cancel')
+
+	if (action !== 'confirm') {
+		return
+	}
+
+	const result = await feedback.del(deleteIds.value).then(() => true).catch(() => false)
+
+	if (result) {
+		ElMessage.success('删除成功')
+		deleteIds.value = []
+		await execute()
+	} else {
+		ElMessage.error('删除失败')
+	}
 }
 </script>
 
@@ -104,6 +139,13 @@ const handleDelete = (row: any) => {
 					<el-button @click="resetQuery">
 						重置
 					</el-button>
+					<el-button 
+						type="danger" 
+						@click="handleBatchDelete" 
+						:disabled="deleteIds.length === 0"
+					>
+						批量删除
+					</el-button>
 				</el-form-item>
 			</el-form>
 
@@ -112,7 +154,9 @@ const handleDelete = (row: any) => {
 				style="width: 100%"
 				v-loading="isLoading"
 				stripe
+				@selection-change="handleSelectionChange"
 			>
+				<el-table-column type="selection" width="55" align="center" />
 				<el-table-column type="index" label="序号" width="60" align="center" />
 				<el-table-column prop="surveyCode" label="问卷编号" width="150" show-overflow-tooltip />
 				<el-table-column prop="ticketNo" label="投诉编号" width="120" align="center" />

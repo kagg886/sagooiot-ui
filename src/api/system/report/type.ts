@@ -101,3 +101,5 @@ export type Feedback = {
 export type FeedbackQueryParams = BasePageQuery & {
 	investigatorName?: string;
 }
+
+export type FeedbackCreateParams = Omit<Feedback, 'id' | 'createdAt'>
