@@ -12,7 +12,8 @@ import {
 	ComplaintArea,
 	UpdateComplaintRequest,
 	Complaint,
-	FeedbackCreateParams, ComplaintResolveHistoryInsertRequest,
+	FeedbackCreateParams,
+	ComplaintResolveHistoryInsertRequest,
 } from '/@/api/system/report/type'
 import system from '/@/api/system'
 import { useAsyncState } from '@vueuse/core'
@@ -331,10 +332,9 @@ const {
 
 const feedback = ref(false)
 const feedFormRef = ref()
-const feedCreateForm = ref<FeedbackCreateParams>({
+const feedCreateForm = ref<Omit<FeedbackCreateParams, 'surveyCode'>>({
 	contactInfo: '',
 	investigatorName: '',
-	surveyCode: '',
 	ticketNo: 0,
 	processingSpeed: '',
 	staffAttitude: '',
@@ -375,7 +375,6 @@ const handleFeedback = (row: Complaint) => {
 		...feedCreateForm.value,
 		contactInfo: '',
 		investigatorName: '',
-		surveyCode: '',
 		processingSpeed: '',
 		staffAttitude: '',
 		resolutionEffect: '',
@@ -397,7 +396,7 @@ const { loading: createFeedbackLoading, doLoading: createFeedback } = useLoading
 	}
 
 	const result = await feedback_api
-		.create(feedCreateForm.value)
+		.create({ surveyCode: `${new Date().getFullYear()}-${new Date().getMonth()}-${new Date().getDay()}-${(Math.random() * 100000).toFixed(0)}`, ...feedCreateForm.value })
 		.then(() => true)
 		.catch(() => false)
 
@@ -415,7 +414,7 @@ const {
 	execute: getComplaintResolveList,
 } = useAsyncState(async (id: number) => complaint_resolve_history.list(id), [], { immediate: false })
 
-const currentResolveStatus = computed(()=> complaintResolveList.value.at(-1) ?? undefined)
+const currentResolveStatus = computed(() => complaintResolveList.value.at(-1) ?? undefined)
 
 const showUpdateForm = ref(false)
 
@@ -463,7 +462,6 @@ const { loading: createComplaintResolveLoading, doLoading: createComplaintResolv
 	showUpdateForm.value = false
 	await getComplaintResolveList(0, complaintDetail.value?.id!)
 })
-
 </script>
 
 <template>
@@ -559,7 +557,7 @@ const { loading: createComplaintResolveLoading, doLoading: createComplaintResolv
 				</el-table-column>
 				<el-table-column prop="updatedAt" label="最后更新时间" width="180" align="center" />
 				<el-table-column prop="assignee" label="分配给" width="120" align="center" />
-				<el-table-column label="操作" width="260" align="center" fixed="right">
+				<el-table-column label="操作" width="300" align="center" fixed="right">
 					<template #default="{ row }: { row: Complaint }">
 						<el-button
 							size="small"
@@ -671,7 +669,9 @@ const { loading: createComplaintResolveLoading, doLoading: createComplaintResolv
 				<div class="dialog-footer">
 					<el-button @click="handleAddCancel">取消</el-button>
 					<el-button type="primary" @click="handleAddConfirm">
-						<el-icon><Plus /></el-icon>
+						<el-icon>
+							<Plus />
+						</el-icon>
 						提交投诉
 					</el-button>
 					<el-button @click="handleAddCancel">保存草稿</el-button>
@@ -680,33 +680,53 @@ const { loading: createComplaintResolveLoading, doLoading: createComplaintResolv
 		</el-dialog>
 
 		<!-- 编辑投诉对话框 -->
-		<el-dialog v-model="editDialogVisible" title="编辑投诉" width="600px" :close-on-click-modal="false">
+		<el-dialog v-model="editDialogVisible" title="编辑投诉" width="700px" :close-on-click-modal="false">
 			<el-form ref="editFormRef" :model="editForm" :rules="editFormRules" label-width="100px" label-position="left">
-				<el-form-item label="投诉标题" prop="title" required>
-					<el-input v-model="editForm.title" placeholder="请输入投诉标题" maxlength="100" show-word-limit />
-				</el-form-item>
-				<el-form-item label="投诉类型" prop="category" required>
-					<el-select v-model="editForm.category" placeholder="选择投诉类型" style="width: 100%">
-						<el-option v-for="item in report_type" :key="item.value" :label="item.label" :value="item.value" />
-					</el-select>
-				</el-form-item>
-				<el-form-item label="投诉来源" prop="source" required>
-					<el-select v-model="editForm.source" placeholder="选择投诉来源" style="width: 100%">
-						<el-option v-for="item in report_source" :key="item.value" :label="item.label" :value="item.value" />
-					</el-select>
-				</el-form-item>
-				<el-form-item label="投诉区域" prop="area" required>
-					<el-select v-model="editForm.area" placeholder="选择投诉区域" style="width: 100%">
-						<el-option label="A区" value="A区" />
-						<el-option label="B区" value="B区" />
-					</el-select>
-				</el-form-item>
-				<el-form-item label="投诉人姓名" prop="complainantName" required>
-					<el-input v-model="editForm.complainantName" placeholder="请输入投诉人姓名" maxlength="50" />
-				</el-form-item>
-				<el-form-item label="联系方式" prop="contact">
-					<el-input v-model="editForm.contact" placeholder="请输入联系电话或邮箱" maxlength="50" />
-				</el-form-item>
+				<el-row :gutter="35">
+					<el-col :xs="24" :sm="12" :md="12" :lg="12" :xl="12" >
+						<el-form-item label="投诉标题" prop="title" required>
+							<el-input v-model="editForm.title" placeholder="请输入投诉标题" maxlength="100" show-word-limit />
+						</el-form-item>
+					</el-col>
+
+					<el-col :xs="24" :sm="12" :md="12" :lg="12" :xl="12">
+						<el-form-item label="投诉类型" prop="category" required>
+							<el-select v-model="editForm.category" placeholder="选择投诉类型" style="width: 100%">
+								<el-option v-for="item in report_type" :key="item.value" :label="item.label" :value="item.value" />
+							</el-select>
+						</el-form-item>
+					</el-col>
+
+					<el-col :xs="24" :sm="12" :md="12" :lg="12" :xl="12">
+						<el-form-item label="投诉来源" prop="source" required>
+							<el-select v-model="editForm.source" placeholder="选择投诉来源" style="width: 100%">
+								<el-option v-for="item in report_source" :key="item.value" :label="item.label" :value="item.value" />
+							</el-select>
+						</el-form-item>
+					</el-col>
+
+					<el-col :xs="24" :sm="12" :md="12" :lg="12" :xl="12">
+						<el-form-item label="投诉区域" prop="area" required>
+							<el-select v-model="editForm.area" placeholder="选择投诉区域" style="width: 100%">
+								<el-option label="A区" value="A区" />
+								<el-option label="B区" value="B区" />
+							</el-select>
+						</el-form-item>
+					</el-col>
+
+					<el-col :xs="24" :sm="12" :md="12" :lg="12" :xl="12">
+						<el-form-item label="投诉人姓名" prop="complainantName" required>
+							<el-input v-model="editForm.complainantName" placeholder="请输入投诉人姓名" maxlength="50" />
+						</el-form-item>
+					</el-col>
+
+					<el-col :xs="24" :sm="12" :md="12" :lg="12" :xl="12">
+						<el-form-item label="联系方式" prop="contact">
+							<el-input v-model="editForm.contact" placeholder="请输入联系电话或邮箱" maxlength="50" />
+						</el-form-item>
+					</el-col>
+				</el-row>
+
 				<el-form-item label="投诉等级" prop="level" required>
 					<el-radio-group v-model="editForm.level">
 						<el-radio v-for="item in report_level" :label="item.value" :key="item.value">
@@ -737,7 +757,9 @@ const { loading: createComplaintResolveLoading, doLoading: createComplaintResolv
 				<div class="dialog-footer">
 					<el-button @click="handleEditCancel">取消</el-button>
 					<el-button type="primary" @click="handleEditConfirm">
-						<el-icon><ele-Check /></el-icon>
+						<el-icon>
+							<ele-Check />
+						</el-icon>
 						提交修改
 					</el-button>
 					<el-button @click="handleEditCancel">保存草稿</el-button>
@@ -746,23 +768,30 @@ const { loading: createComplaintResolveLoading, doLoading: createComplaintResolv
 		</el-dialog>
 
 		<!-- 反馈对话框 -->
-		<el-dialog v-model="feedback" title="投诉反馈" width="600px" :close-on-click-modal="false">
+		<el-dialog v-model="feedback" title="投诉反馈" width="700px" :close-on-click-modal="false">
 			<el-form ref="feedFormRef" :model="feedCreateForm" :rules="feedFormRules" label-width="120px" label-position="left">
-				<el-form-item label="问卷编号" prop="surveyCode" required>
-					<el-input v-model="feedCreateForm.surveyCode" placeholder="请输入问卷编号" maxlength="50" />
-				</el-form-item>
+<!--				<el-form-item label="问卷编号" prop="surveyCode" required>-->
+<!--					<el-input v-model="feedCreateForm.surveyCode" placeholder="请输入问卷编号" maxlength="50" />-->
+<!--				</el-form-item>-->
 
-				<el-form-item label="投诉编号" prop="ticketNo">
-					<el-input v-model="feedCreateForm.ticketNo" placeholder="投诉编号" disabled />
-				</el-form-item>
+<!--				<el-form-item label="投诉编号" prop="ticketNo">-->
+<!--					<el-input v-model="feedCreateForm.ticketNo" placeholder="投诉编号" disabled />-->
+<!--				</el-form-item>-->
+				<div style="display: flex">
+					<div style="flex: 1">
+						<el-form-item label="调查者姓名" prop="investigatorName" required>
+							<el-input v-model="feedCreateForm.investigatorName" placeholder="请输入调查者姓名" maxlength="50" />
+						</el-form-item>
+					</div>
+					<div style="width: 32px"></div>
+					<div style="flex: 1">
+						<el-form-item label="联系信息" prop="contactInfo" required>
+							<el-input v-model="feedCreateForm.contactInfo" placeholder="请输入联系电话或邮箱" maxlength="100" />
+						</el-form-item>
+					</div>
+				</div>
 
-				<el-form-item label="调查者姓名" prop="investigatorName" required>
-					<el-input v-model="feedCreateForm.investigatorName" placeholder="请输入调查者姓名" maxlength="50" />
-				</el-form-item>
 
-				<el-form-item label="联系信息" prop="contactInfo" required>
-					<el-input v-model="feedCreateForm.contactInfo" placeholder="请输入联系电话或邮箱" maxlength="100" />
-				</el-form-item>
 
 				<el-form-item label="处理速度" prop="processingSpeed" required>
 					<el-radio-group v-model="feedCreateForm.processingSpeed">
@@ -813,7 +842,9 @@ const { loading: createComplaintResolveLoading, doLoading: createComplaintResolv
 				<div class="dialog-footer">
 					<el-button @click="handleFeedbackCancel">取消</el-button>
 					<el-button type="primary" @click="createFeedback" :loading="createFeedbackLoading">
-						<el-icon><Plus /></el-icon>
+						<el-icon>
+							<Plus />
+						</el-icon>
 						提交反馈
 					</el-button>
 				</div>
@@ -838,9 +869,13 @@ const { loading: createComplaintResolveLoading, doLoading: createComplaintResolv
 					</div>
 					<h2 class="complaint-title">{{ complaintDetail.title }}</h2>
 					<div class="complaint-time">
-						<el-icon><ele-Clock /></el-icon>
+						<el-icon>
+							<ele-Clock />
+						</el-icon>
 						<span>创建时间：{{ complaintDetail.createdAt }}</span>
-						<el-icon class="ml-4"><ele-Refresh /></el-icon>
+						<el-icon class="ml-4">
+							<ele-Refresh />
+						</el-icon>
 						<span>更新时间：{{ complaintDetail.updatedAt }}</span>
 					</div>
 				</div>
@@ -851,7 +886,9 @@ const { loading: createComplaintResolveLoading, doLoading: createComplaintResolv
 						<el-card shadow="never" class="info-card">
 							<template #header>
 								<div class="card-header">
-									<el-icon><ele-Document /></el-icon>
+									<el-icon>
+										<ele-Document />
+									</el-icon>
 									<span>基本信息</span>
 								</div>
 							</template>
@@ -891,7 +928,9 @@ const { loading: createComplaintResolveLoading, doLoading: createComplaintResolv
 						<el-card shadow="never" class="info-card mt-4">
 							<template #header>
 								<div class="card-header">
-									<el-icon><ele-ChatDotRound /></el-icon>
+									<el-icon>
+										<ele-ChatDotRound />
+									</el-icon>
 									<span>投诉内容</span>
 								</div>
 							</template>
@@ -904,7 +943,9 @@ const { loading: createComplaintResolveLoading, doLoading: createComplaintResolv
 						<el-card shadow="never" class="info-card mt-4">
 							<template #header>
 								<div class="card-header">
-									<el-icon><ele-Clock /></el-icon>
+									<el-icon>
+										<ele-Clock />
+									</el-icon>
 									<span>处理记录</span>
 								</div>
 							</template>
@@ -928,7 +969,9 @@ const { loading: createComplaintResolveLoading, doLoading: createComplaintResolv
 						<el-card shadow="never" class="info-card">
 							<template #header>
 								<div class="card-header">
-									<el-icon><ele-User /></el-icon>
+									<el-icon>
+										<ele-User />
+									</el-icon>
 									<span>投诉人信息</span>
 								</div>
 							</template>
@@ -936,11 +979,15 @@ const { loading: createComplaintResolveLoading, doLoading: createComplaintResolv
 							<div class="complainant-info">
 								<div class="complainant-name">{{ complaintDetail.complainantName }}</div>
 								<div class="complainant-contact">
-									<el-icon><ele-Phone /></el-icon>
+									<el-icon>
+										<ele-Phone />
+									</el-icon>
 									<span>{{ complaintDetail.contact || '暂无' }}</span>
 								</div>
 								<div class="complainant-area">
-									<el-icon><ele-Location /></el-icon>
+									<el-icon>
+										<ele-Location />
+									</el-icon>
 									<span>{{ complaintDetail.area }}</span>
 								</div>
 							</div>
@@ -950,7 +997,9 @@ const { loading: createComplaintResolveLoading, doLoading: createComplaintResolv
 						<el-card shadow="never" class="info-card mt-4" v-if="!showUpdateForm">
 							<template #header>
 								<div class="card-header">
-									<el-icon><ele-Warning /></el-icon>
+									<el-icon>
+										<ele-Warning />
+									</el-icon>
 									<span>处理操作</span>
 								</div>
 							</template>
@@ -966,14 +1015,7 @@ const { loading: createComplaintResolveLoading, doLoading: createComplaintResolv
 									<div class="note-content">{{ currentResolveStatus?.description }}</div>
 								</div>
 
-								<el-button
-									type="primary"
-									size="large"
-									class="update-btn"
-									@click="showUpdateForm = true"
-								>
-									更新处理状态
-								</el-button>
+								<el-button type="primary" size="large" class="update-btn" @click="showUpdateForm = true"> 更新处理状态 </el-button>
 							</div>
 						</el-card>
 
@@ -981,7 +1023,9 @@ const { loading: createComplaintResolveLoading, doLoading: createComplaintResolv
 						<el-card shadow="never" class="info-card mt-4" v-else>
 							<template #header>
 								<div class="card-header">
-									<el-icon><ele-Warning /></el-icon>
+									<el-icon>
+										<ele-Warning />
+									</el-icon>
 									<span>处理操作</span>
 								</div>
 							</template>
@@ -989,11 +1033,7 @@ const { loading: createComplaintResolveLoading, doLoading: createComplaintResolv
 							<div class="update-form">
 								<div class="form-item">
 									<span class="form-label">更新状态</span>
-									<el-select
-										v-model="formComplaintResolve.status"
-										placeholder="选择状态"
-										style="width: 100%"
-									>
+									<el-select v-model="formComplaintResolve.status" placeholder="选择状态" style="width: 100%">
 										<el-option label="待处理" value="pending" />
 										<el-option label="处理中" value="processing" />
 										<el-option label="已完成" value="completed" />
@@ -1013,17 +1053,13 @@ const { loading: createComplaintResolveLoading, doLoading: createComplaintResolv
 								</div>
 
 								<div class="form-actions">
-									<el-button
-										type="primary"
-										:loading="createComplaintResolveLoading"
-										@click="createComplaintResolve"
-									>
-										<el-icon><ele-Document /></el-icon>
+									<el-button type="primary" :loading="createComplaintResolveLoading" @click="createComplaintResolve">
+										<el-icon>
+											<ele-Document />
+										</el-icon>
 										保存
 									</el-button>
-									<el-button @click="handleCancelUpdate">
-										取消
-									</el-button>
+									<el-button @click="handleCancelUpdate"> 取消 </el-button>
 								</div>
 							</div>
 						</el-card>
