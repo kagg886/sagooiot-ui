@@ -692,21 +692,36 @@ const {loading: createFeedbackLoading, doLoading: createFeedback} = useLoading(a
 				</el-form-item>
 
 				<el-form-item label="处理速度" prop="processingSpeed" required>
-					<el-select v-model="feedCreateForm.processingSpeed" placeholder="请选择处理速度评价" style="width: 100%">
-						<el-option v-for="item in related_level" :key="item.value" :label="item.label" :value="item.value" />
-					</el-select>
+					<el-radio-group v-model="feedCreateForm.processingSpeed">
+						<el-radio v-for="item in related_level" :label="item.value" :key="item.value">
+							<span>{{ item.label }}</span>
+						</el-radio>
+					</el-radio-group>
+<!--					<el-select v-model="feedCreateForm.processingSpeed" placeholder="请选择处理速度评价" style="width: 100%">-->
+<!--						<el-option v-for="item in related_level" :key="item.value" :label="item.label" :value="item.value" />-->
+<!--					</el-select>-->
 				</el-form-item>
 
 				<el-form-item label="工作人员态度" prop="staffAttitude" required>
-					<el-select v-model="feedCreateForm.staffAttitude" placeholder="请选择工作人员态度评价" style="width: 100%">
-						<el-option v-for="item in related_level" :key="item.value" :label="item.label" :value="item.value" />
-					</el-select>
+					<el-radio-group v-model="feedCreateForm.staffAttitude">
+						<el-radio v-for="item in related_level" :label="item.value" :key="item.value">
+							<span>{{ item.label }}</span>
+						</el-radio>
+					</el-radio-group>
+<!--					<el-select v-model="feedCreateForm.staffAttitude" placeholder="请选择工作人员态度评价" style="width: 100%">-->
+<!--						<el-option v-for="item in related_level" :key="item.value" :label="item.label" :value="item.value" />-->
+<!--					</el-select>-->
 				</el-form-item>
 
 				<el-form-item label="解决效果" prop="resolutionEffect" required>
-					<el-select v-model="feedCreateForm.resolutionEffect" placeholder="请选择解决效果评价" style="width: 100%">
-						<el-option v-for="item in related_level" :key="item.value" :label="item.label" :value="item.value" />
-					</el-select>
+					<el-radio-group v-model="feedCreateForm.resolutionEffect">
+						<el-radio v-for="item in related_level" :label="item.value" :key="item.value">
+							<span>{{ item.label }}</span>
+						</el-radio>
+					</el-radio-group>
+<!--					<el-select v-model="feedCreateForm.resolutionEffect" placeholder="请选择解决效果评价" style="width: 100%">-->
+<!--						<el-option v-for="item in related_level" :key="item.value" :label="item.label" :value="item.value" />-->
+<!--					</el-select>-->
 				</el-form-item>
 
 				<el-form-item label="其他建议" prop="otherSuggestions">
