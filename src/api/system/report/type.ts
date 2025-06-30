@@ -115,3 +115,6 @@ export type ComplaintResolveHistory = {
 	createdAt: string;
 	updatedAt: string
 }
+
+
+export type ComplaintResolveHistoryInsertRequest = Pick<ComplaintResolveHistory, 'status' | 'description' | 'ticketNo'>

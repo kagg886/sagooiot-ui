@@ -12,7 +12,7 @@ import {
 	ComplaintArea,
 	UpdateComplaintRequest,
 	Complaint,
-	FeedbackCreateParams,
+	FeedbackCreateParams, ComplaintResolveHistoryInsertRequest,
 } from '/@/api/system/report/type'
 import system from '/@/api/system'
 import { useAsyncState } from '@vueuse/core'
@@ -415,10 +415,53 @@ const {
 	execute: getComplaintResolveList,
 } = useAsyncState(async (id: number) => complaint_resolve_history.list(id), [], { immediate: false })
 
+const showUpdateForm = ref(false)
+
 const handleDetail = (row: Complaint) => {
 	complaintDetail.value = row
+	showUpdateForm.value = false
 	getComplaintResolveList(0, row.id).then(() => (complaintDetailDialogShow.value = true))
 }
+
+const handleCancelUpdate = () => {
+	showUpdateForm.value = false
+	formComplaintResolve.value = {
+		description: '',
+		status: 'processing',
+	}
+}
+
+const formComplaintResolve = ref<Omit<ComplaintResolveHistoryInsertRequest, 'ticketNo'>>({
+	description: '',
+	status: 'processing',
+})
+
+const { loading: createComplaintResolveLoading, doLoading: createComplaintResolve } = useLoading(async () => {
+	const valid = await formComplaintResolve.value?.description?.trim()
+	if (!valid) {
+		ElMessage.error('请输入处理描述')
+		return
+	}
+	const result = await complaint_resolve_history
+		.update({
+			ticketNo: complaintDetail.value?.id!,
+			...formComplaintResolve.value,
+		})
+		.then(() => true)
+		.catch(() => false)
+
+	if (!result) {
+		return
+	}
+	ElMessage.success('处理状态更新成功')
+	formComplaintResolve.value = {
+		description: '',
+		status: 'processing',
+	}
+	showUpdateForm.value = false
+	await getComplaintResolveList(0, complaintDetail.value?.id!)
+})
+
 </script>
 
 <template>
@@ -901,10 +944,87 @@ const handleDetail = (row: Complaint) => {
 							</div>
 						</el-card>
 
-						<!-- 空白区域 -->
-						<div class="empty-space">
-							<div class="empty-text">留空</div>
-						</div>
+						<!-- 处理操作区域 -->
+						<el-card shadow="never" class="info-card mt-4" v-if="!showUpdateForm">
+							<template #header>
+								<div class="card-header">
+									<el-icon><ele-Warning /></el-icon>
+									<span>处理操作</span>
+								</div>
+							</template>
+
+							<div class="process-info">
+								<div class="current-status">
+									<span class="status-label">当前状态</span>
+									<div class="status-value">{{ formatReportStatus(complaintDetail.status) }}</div>
+								</div>
+
+								<div class="process-note">
+									<span class="note-label">处理备注</span>
+									<div class="note-content">{{ complaintDetail.assignee ? '已安排工程队前往现场查看，预计今日内完成修复。' : '暂无处理备注' }}</div>
+								</div>
+
+								<el-button
+									type="primary"
+									size="large"
+									class="update-btn"
+									@click="showUpdateForm = true"
+								>
+									更新处理状态
+								</el-button>
+							</div>
+						</el-card>
+
+						<!-- 更新处理状态表单 -->
+						<el-card shadow="never" class="info-card mt-4" v-else>
+							<template #header>
+								<div class="card-header">
+									<el-icon><ele-Warning /></el-icon>
+									<span>处理操作</span>
+								</div>
+							</template>
+
+							<div class="update-form">
+								<div class="form-item">
+									<span class="form-label">更新状态</span>
+									<el-select
+										v-model="formComplaintResolve.status"
+										placeholder="选择状态"
+										style="width: 100%"
+									>
+										<el-option label="待处理" value="pending" />
+										<el-option label="处理中" value="processing" />
+										<el-option label="已完成" value="completed" />
+									</el-select>
+								</div>
+
+								<div class="form-item">
+									<span class="form-label">处理备注</span>
+									<el-input
+										v-model="formComplaintResolve.description"
+										type="textarea"
+										:rows="4"
+										placeholder="请输入处理备注..."
+										maxlength="500"
+										show-word-limit
+									/>
+								</div>
+
+								<div class="form-actions">
+									<el-button
+										type="primary"
+										:loading="createComplaintResolveLoading"
+										@click="createComplaintResolve"
+									>
+										<el-icon><ele-Document /></el-icon>
+										保存
+									</el-button>
+									<el-button @click="handleCancelUpdate">
+										取消
+									</el-button>
+								</div>
+							</div>
+						</el-card>
 					</el-col>
 				</el-row>
 			</div>
@@ -1115,20 +1235,85 @@ const handleDetail = (row: Complaint) => {
 		}
 	}
 
-	.empty-space {
-		margin-top: 20px;
-		height: 200px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		border: 2px dashed #dcdfe6;
-		border-radius: 8px;
-		background-color: #fafafa;
+	.process-info {
+		padding: 20px;
 
-		.empty-text {
-			font-size: 48px;
-			font-weight: bold;
-			color: #c0c4cc;
+		.current-status {
+			margin-bottom: 20px;
+
+			.status-label {
+				font-size: 14px;
+				color: #909399;
+				display: block;
+				margin-bottom: 8px;
+			}
+
+			.status-value {
+				font-size: 18px;
+				font-weight: 600;
+				color: #303133;
+			}
+		}
+
+		.process-note {
+			margin-bottom: 24px;
+
+			.note-label {
+				font-size: 14px;
+				color: #909399;
+				display: block;
+				margin-bottom: 8px;
+			}
+
+			.note-content {
+				padding: 12px;
+				background-color: #f8f9fa;
+				border-radius: 6px;
+				color: #606266;
+				line-height: 1.5;
+				min-height: 60px;
+			}
+		}
+
+		.update-btn {
+			width: 100%;
+			height: 48px;
+			font-size: 16px;
+			font-weight: 600;
+			//background-color: #303133;
+			//border-color: #303133;
+			//
+			//&:hover {
+			//	background-color: #404040;
+			//	border-color: #404040;
+			//}
+		}
+	}
+
+	.update-form {
+		padding: 20px;
+
+		.form-item {
+			margin-bottom: 20px;
+
+			.form-label {
+				font-size: 14px;
+				color: #303133;
+				font-weight: 500;
+				display: block;
+				margin-bottom: 8px;
+			}
+		}
+
+		.form-actions {
+			display: flex;
+			gap: 12px;
+			margin-top: 24px;
+
+			.el-button {
+				flex: 1;
+				height: 40px;
+			}
 		}
 	}
 
