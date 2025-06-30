@@ -5,11 +5,14 @@ import { Search, Plus, Delete, View, Edit } from '@element-plus/icons-vue'
 import { useLoading } from '/@/utils/loading-util'
 import complaints from '/@/api/system/report/complaints'
 import feedback_api from '/@/api/system/report/feedback'
+import complaint_resolve_history from '/@/api/system/report/complaint-resolve-history'
 import {
 	ComplaintQueryParams,
 	CreateComplaintRequest,
 	ComplaintArea,
-	UpdateComplaintRequest, Complaint, FeedbackCreateParams,
+	UpdateComplaintRequest,
+	Complaint,
+	FeedbackCreateParams,
 } from '/@/api/system/report/type'
 import system from '/@/api/system'
 import { useAsyncState } from '@vueuse/core'
@@ -53,6 +56,20 @@ const formatReportType = computed<(value: string) => string>(() => {
 			return '-'
 		}
 		return proxy.selectDictLabel(types, value)
+	}
+})
+
+// eslint-disable-next-line no-unused-vars
+const formatReportSource = computed<(value: string) => string>(() => {
+	const sources = unref(report_source)
+	return (value: string) => {
+		if (value === undefined) {
+			return '-'
+		}
+		if (sources === undefined) {
+			return '-'
+		}
+		return proxy.selectDictLabel(sources, value)
 	}
 })
 
@@ -183,7 +200,7 @@ const editFormRules = {
 }
 
 const currentLoadingEdit = ref(-1)
-const {loading: loadingEdit, doLoading: handleEdit} = useLoading(async (id: number) => {
+const { loading: loadingEdit, doLoading: handleEdit } = useLoading(async (id: number) => {
 	currentLoadingEdit.value = id
 	const data = await complaints.detail(id).catch(() => undefined)
 	if (!data) {
@@ -221,12 +238,6 @@ const handleEditConfirm = async () => {
 		await getComplaintList()
 	}
 }
-
-
-const handleDetail = (row: Complaint) => {
-	ElMessage.info(`查看投诉详情: ${row.title}`)
-}
-
 const handleDeleteSingle = async (row: Complaint) => {
 	const status = await ElMessageBox.confirm(`确定要删除投诉 "${row.title}" 吗？`, '提示', {
 		confirmButtonText: '确定',
@@ -292,34 +303,31 @@ const {
 	isLoading: isLoadingUserList,
 	execute: loadingUserList,
 } = useAsyncState<SimpleUser[]>(async (name: string) => {
-
 	//为了防止默认情况下的用户列表不存在已经分配的用户，需要提前获取这个用户的bean。
 	const user_id = editForm.value?.assignee ?? undefined
 
-
-	const [origin_user,data]: [origin_user: SimpleUser | undefined,data: SimpleUser[]] = await Promise.all([
+	const [origin_user, data]: [origin_user: SimpleUser | undefined, data: SimpleUser[]] = await Promise.all([
 		user_id === undefined ? Promise.resolve(undefined) : system.user.detail(user_id).catch(() => undefined),
 		system.user
 			.getList({ keyWords: name, status: 1 })
 			.then((res: { list: SimpleUser[] }) => res.list)
-			.catch(() => [])
+			.catch(() => []),
 	])
 
 	if (data.length === 0) {
 		return origin_user !== undefined ? [origin_user] : []
 	}
 
-	if (data.filter(item=> item.id === origin_user?.id).length !== 0) {
+	if (data.filter((item) => item.id === origin_user?.id).length !== 0) {
 		return data
 	}
 
 	if (origin_user !== undefined) {
-		return [origin_user,...data]
+		return [origin_user, ...data]
 	} else {
 		return data
 	}
 }, [])
-
 
 const feedback = ref(false)
 const feedFormRef = ref()
@@ -331,7 +339,7 @@ const feedCreateForm = ref<FeedbackCreateParams>({
 	processingSpeed: '',
 	staffAttitude: '',
 	resolutionEffect: '',
-	otherSuggestions: ''
+	otherSuggestions: '',
 })
 
 // 反馈表单验证规则
@@ -340,7 +348,7 @@ const feedFormRules = {
 	investigatorName: [{ required: true, message: '请输入调查者姓名', trigger: 'blur' }],
 	contactInfo: [
 		{ required: true, message: '请输入联系信息', trigger: 'blur' },
-		{ pattern: /^(1[3-9]\d{9}|[\w.-]+@[\w.-]+\.\w+)$/, message: '请输入正确的手机号或邮箱', trigger: 'blur' }
+		{ pattern: /^(1[3-9]\d{9}|[\w.-]+@[\w.-]+\.\w+)$/, message: '请输入正确的手机号或邮箱', trigger: 'blur' },
 	],
 	processingSpeed: [{ required: true, message: '请选择处理速度评价', trigger: 'change' }],
 	staffAttitude: [{ required: true, message: '请选择工作人员态度评价', trigger: 'change' }],
@@ -348,13 +356,14 @@ const feedFormRules = {
 }
 
 //投诉等级，投诉来源，投诉类型
-const { related_level }: {
+const {
+	related_level,
+}: {
 	[key: string]: Array<{
 		label: string
 		value: string
 	}>
 } = proxy.useDict('related_level')
-
 
 const handleFeedback = (row: Complaint) => {
 	// 重置表单
@@ -370,7 +379,7 @@ const handleFeedback = (row: Complaint) => {
 		processingSpeed: '',
 		staffAttitude: '',
 		resolutionEffect: '',
-		otherSuggestions: ''
+		otherSuggestions: '',
 	}
 	feedback.value = true
 }
@@ -381,7 +390,7 @@ const handleFeedbackCancel = () => {
 	feedFormRef.value?.resetFields()
 }
 
-const {loading: createFeedbackLoading, doLoading: createFeedback} = useLoading(async () => {
+const { loading: createFeedbackLoading, doLoading: createFeedback } = useLoading(async () => {
 	const valid = await feedFormRef.value?.validate().catch(() => false)
 	if (!valid) {
 		return
@@ -397,6 +406,19 @@ const {loading: createFeedbackLoading, doLoading: createFeedback} = useLoading(a
 	}
 	handleFeedbackCancel()
 })
+
+const complaintDetailDialogShow = ref(false)
+const complaintDetail = ref<Complaint | undefined>(undefined)
+const {
+	state: complaintResolveList,
+	isLoading: isComplaintResolveLoading,
+	execute: getComplaintResolveList,
+} = useAsyncState(async (id: number) => complaint_resolve_history.list(id), [], { immediate: false })
+
+const handleDetail = (row: Complaint) => {
+	complaintDetail.value = row
+	getComplaintResolveList(0, row.id).then(() => (complaintDetailDialogShow.value = true))
+}
 </script>
 
 <template>
@@ -493,8 +515,14 @@ const {loading: createFeedbackLoading, doLoading: createFeedback} = useLoading(a
 				<el-table-column prop="updatedAt" label="最后更新时间" width="180" align="center" />
 				<el-table-column prop="assignee" label="分配给" width="120" align="center" />
 				<el-table-column label="操作" width="260" align="center" fixed="right">
-					<template #default="{ row }: {row: Complaint}">
-						<el-button size="small" type="primary" link @click="handleDetail(row)">
+					<template #default="{ row }: { row: Complaint }">
+						<el-button
+							size="small"
+							type="primary"
+							link
+							@click="handleDetail(row)"
+							:loading="isComplaintResolveLoading && complaintDetail?.id == row.id"
+						>
 							<el-icon>
 								<View />
 							</el-icon>
@@ -697,9 +725,9 @@ const {loading: createFeedbackLoading, doLoading: createFeedback} = useLoading(a
 							<span>{{ item.label }}</span>
 						</el-radio>
 					</el-radio-group>
-<!--					<el-select v-model="feedCreateForm.processingSpeed" placeholder="请选择处理速度评价" style="width: 100%">-->
-<!--						<el-option v-for="item in related_level" :key="item.value" :label="item.label" :value="item.value" />-->
-<!--					</el-select>-->
+					<!--					<el-select v-model="feedCreateForm.processingSpeed" placeholder="请选择处理速度评价" style="width: 100%">-->
+					<!--						<el-option v-for="item in related_level" :key="item.value" :label="item.label" :value="item.value" />-->
+					<!--					</el-select>-->
 				</el-form-item>
 
 				<el-form-item label="工作人员态度" prop="staffAttitude" required>
@@ -708,9 +736,9 @@ const {loading: createFeedbackLoading, doLoading: createFeedback} = useLoading(a
 							<span>{{ item.label }}</span>
 						</el-radio>
 					</el-radio-group>
-<!--					<el-select v-model="feedCreateForm.staffAttitude" placeholder="请选择工作人员态度评价" style="width: 100%">-->
-<!--						<el-option v-for="item in related_level" :key="item.value" :label="item.label" :value="item.value" />-->
-<!--					</el-select>-->
+					<!--					<el-select v-model="feedCreateForm.staffAttitude" placeholder="请选择工作人员态度评价" style="width: 100%">-->
+					<!--						<el-option v-for="item in related_level" :key="item.value" :label="item.label" :value="item.value" />-->
+					<!--					</el-select>-->
 				</el-form-item>
 
 				<el-form-item label="解决效果" prop="resolutionEffect" required>
@@ -719,9 +747,9 @@ const {loading: createFeedbackLoading, doLoading: createFeedback} = useLoading(a
 							<span>{{ item.label }}</span>
 						</el-radio>
 					</el-radio-group>
-<!--					<el-select v-model="feedCreateForm.resolutionEffect" placeholder="请选择解决效果评价" style="width: 100%">-->
-<!--						<el-option v-for="item in related_level" :key="item.value" :label="item.label" :value="item.value" />-->
-<!--					</el-select>-->
+					<!--					<el-select v-model="feedCreateForm.resolutionEffect" placeholder="请选择解决效果评价" style="width: 100%">-->
+					<!--						<el-option v-for="item in related_level" :key="item.value" :label="item.label" :value="item.value" />-->
+					<!--					</el-select>-->
 				</el-form-item>
 
 				<el-form-item label="其他建议" prop="otherSuggestions">
@@ -743,6 +771,147 @@ const {loading: createFeedbackLoading, doLoading: createFeedback} = useLoading(a
 						<el-icon><Plus /></el-icon>
 						提交反馈
 					</el-button>
+				</div>
+			</template>
+		</el-dialog>
+
+		<el-dialog v-model="complaintDetailDialogShow" title="投诉详情" width="800px" :close-on-click-modal="false">
+			<div v-if="complaintDetail" class="complaint-detail">
+				<!-- 头部信息 -->
+				<div class="complaint-header">
+					<div class="complaint-id">
+						<span class="id-text">#{{ complaintDetail.id }}</span>
+						<el-tag :type="complaintDetail.level === '1' ? 'danger' : complaintDetail.level === '2' ? 'warning' : 'info'" class="ml-2">
+							{{ formatReportLevel(complaintDetail.level) }}
+						</el-tag>
+						<el-tag
+							:type="complaintDetail.status === 'pending' ? 'info' : complaintDetail.status === 'processing' ? 'warning' : 'success'"
+							class="ml-2"
+						>
+							{{ formatReportStatus(complaintDetail.status) }}
+						</el-tag>
+					</div>
+					<h2 class="complaint-title">{{ complaintDetail.title }}</h2>
+					<div class="complaint-time">
+						<el-icon><ele-Clock /></el-icon>
+						<span>创建时间：{{ complaintDetail.createdAt }}</span>
+						<el-icon class="ml-4"><ele-Refresh /></el-icon>
+						<span>更新时间：{{ complaintDetail.updatedAt }}</span>
+					</div>
+				</div>
+
+				<el-row :gutter="20" class="mt-4">
+					<!-- 左侧基本信息 -->
+					<el-col :span="14">
+						<el-card shadow="never" class="info-card">
+							<template #header>
+								<div class="card-header">
+									<el-icon><ele-Document /></el-icon>
+									<span>基本信息</span>
+								</div>
+							</template>
+
+							<el-row :gutter="16" class="info-row">
+								<el-col :span="12">
+									<div class="info-item">
+										<span class="info-label">投诉类型</span>
+										<span class="info-value">{{ formatReportType(complaintDetail.category) }}</span>
+									</div>
+								</el-col>
+								<el-col :span="12">
+									<div class="info-item">
+										<span class="info-label">投诉来源</span>
+										<span class="info-value">{{ formatReportSource(complaintDetail.source) }}</span>
+									</div>
+								</el-col>
+							</el-row>
+
+							<el-row :gutter="16" class="info-row">
+								<el-col :span="12">
+									<div class="info-item">
+										<span class="info-label">投诉区域</span>
+										<span class="info-value">{{ complaintDetail.area }}</span>
+									</div>
+								</el-col>
+								<el-col :span="12">
+									<div class="info-item">
+										<span class="info-label">负责人</span>
+										<span class="info-value">{{ complaintDetail.assignee || '-' }}</span>
+									</div>
+								</el-col>
+							</el-row>
+						</el-card>
+
+						<!-- 投诉内容 -->
+						<el-card shadow="never" class="info-card mt-4">
+							<template #header>
+								<div class="card-header">
+									<el-icon><ele-ChatDotRound /></el-icon>
+									<span>投诉内容</span>
+								</div>
+							</template>
+							<div class="complaint-content">
+								{{ complaintDetail.content }}
+							</div>
+						</el-card>
+
+						<!-- 处理记录 -->
+						<el-card shadow="never" class="info-card mt-4">
+							<template #header>
+								<div class="card-header">
+									<el-icon><ele-Clock /></el-icon>
+									<span>处理记录</span>
+								</div>
+							</template>
+							<el-timeline v-loading="isComplaintResolveLoading">
+								<el-timeline-item v-for="(record, index) in complaintResolveList" :key="index">
+									<div class="timeline-content">
+										<div class="timeline-header">
+											<span class="timeline-title">{{ formatReportStatus(record.status) }}</span>
+											<span class="timeline-operator">by {{ record.operator }}</span>
+										</div>
+										<p class="timeline-desc">{{ record.description }}</p>
+										<span class="timeline-time">{{ record.createdAt }}</span>
+									</div>
+								</el-timeline-item>
+							</el-timeline>
+						</el-card>
+					</el-col>
+
+					<!-- 右侧投诉人信息 -->
+					<el-col :span="10">
+						<el-card shadow="never" class="info-card">
+							<template #header>
+								<div class="card-header">
+									<el-icon><ele-User /></el-icon>
+									<span>投诉人信息</span>
+								</div>
+							</template>
+
+							<div class="complainant-info">
+								<div class="complainant-name">{{ complaintDetail.complainantName }}</div>
+								<div class="complainant-contact">
+									<el-icon><ele-Phone /></el-icon>
+									<span>{{ complaintDetail.contact || '暂无' }}</span>
+								</div>
+								<div class="complainant-area">
+									<el-icon><ele-Location /></el-icon>
+									<span>{{ complaintDetail.area }}</span>
+								</div>
+							</div>
+						</el-card>
+
+						<!-- 空白区域 -->
+						<div class="empty-space">
+							<div class="empty-text">留空</div>
+						</div>
+					</el-col>
+				</el-row>
+			</div>
+
+			<template #footer>
+				<div class="dialog-footer">
+					<el-button @click="complaintDetailDialogShow = false">关闭</el-button>
 				</div>
 			</template>
 		</el-dialog>
@@ -828,5 +997,174 @@ const {loading: createFeedbackLoading, doLoading: createFeedback} = useLoading(a
 	display: flex;
 	justify-content: flex-end;
 	gap: 8px;
+}
+
+// 投诉详情样式
+.complaint-detail {
+	.complaint-header {
+		border-bottom: 1px solid #ebeef5;
+		padding-bottom: 16px;
+		margin-bottom: 16px;
+
+		.complaint-id {
+			display: flex;
+			align-items: center;
+			margin-bottom: 8px;
+
+			.id-text {
+				font-size: 18px;
+				font-weight: bold;
+				color: #409eff;
+			}
+		}
+
+		.complaint-title {
+			font-size: 20px;
+			font-weight: 600;
+			color: #303133;
+			margin: 8px 0;
+		}
+
+		.complaint-time {
+			display: flex;
+			align-items: center;
+			color: #909399;
+			font-size: 14px;
+
+			.el-icon {
+				margin-right: 4px;
+			}
+		}
+	}
+
+	.info-card {
+		border: 1px solid #ebeef5;
+		border-radius: 8px;
+
+		.card-header {
+			display: flex;
+			align-items: center;
+			font-weight: 600;
+			color: #303133;
+
+			.el-icon {
+				margin-right: 8px;
+				color: #409eff;
+			}
+		}
+
+		.info-row {
+			margin-bottom: 16px;
+
+			&:last-child {
+				margin-bottom: 0;
+			}
+		}
+
+		.info-item {
+			display: flex;
+			flex-direction: column;
+			margin-bottom: 12px;
+
+			.info-label {
+				font-size: 14px;
+				color: #909399;
+				margin-bottom: 4px;
+			}
+
+			.info-value {
+				font-size: 14px;
+				color: #303133;
+				font-weight: 500;
+			}
+		}
+
+		.complaint-content {
+			padding: 16px;
+			background-color: #f8f9fa;
+			border-radius: 6px;
+			line-height: 1.6;
+			color: #303133;
+			min-height: 80px;
+		}
+	}
+
+	.complainant-info {
+		text-align: center;
+		padding: 20px;
+
+		.complainant-name {
+			font-size: 24px;
+			font-weight: 600;
+			color: #303133;
+			margin-bottom: 16px;
+		}
+
+		.complainant-contact,
+		.complainant-area {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			margin-bottom: 12px;
+			color: #606266;
+
+			.el-icon {
+				margin-right: 8px;
+				color: #909399;
+			}
+		}
+	}
+
+	.empty-space {
+		margin-top: 20px;
+		height: 200px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border: 2px dashed #dcdfe6;
+		border-radius: 8px;
+		background-color: #fafafa;
+
+		.empty-text {
+			font-size: 48px;
+			font-weight: bold;
+			color: #c0c4cc;
+		}
+	}
+
+	.timeline-content {
+		flex: 1;
+		padding-bottom: 16px;
+
+		.timeline-header {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			margin-bottom: 4px;
+
+			.timeline-title {
+				font-size: 14px;
+				font-weight: 500;
+				color: #303133;
+			}
+
+			.timeline-operator {
+				font-size: 12px;
+				color: #909399;
+			}
+		}
+
+		.timeline-desc {
+			margin: 0 0 4px 0;
+			color: #606266;
+			line-height: 1.5;
+			font-size: 14px;
+		}
+
+		.timeline-time {
+			font-size: 12px;
+			color: #c0c4cc;
+		}
+	}
 }
 </style>

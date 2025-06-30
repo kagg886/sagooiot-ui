@@ -1,6 +1,8 @@
 // 投诉区域枚举
 export type ComplaintArea = 'A区' | 'B区'
 
+export type ComplaintStatus = 'pending' | 'processing' | 'completed'
+
 // 投诉实体类型
 export interface Complaint {
   id: number;
@@ -13,7 +15,7 @@ export interface Complaint {
 	level: string;
 	content: string;
 	assignee: number;
-	status: string;
+	status: ComplaintStatus;
 
   createdAt: string;
   updatedAt: string;
@@ -103,3 +105,13 @@ export type FeedbackQueryParams = BasePageQuery & {
 }
 
 export type FeedbackCreateParams = Omit<Feedback, 'id' | 'createdAt'>
+
+export type ComplaintResolveHistory = {
+	id: number;
+	ticketNo: number;
+	status: ComplaintStatus;
+	operator: string;
+	description: string
+	createdAt: string;
+	updatedAt: string
+}
