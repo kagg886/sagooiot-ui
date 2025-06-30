@@ -415,6 +415,8 @@ const {
 	execute: getComplaintResolveList,
 } = useAsyncState(async (id: number) => complaint_resolve_history.list(id), [], { immediate: false })
 
+const currentResolveStatus = computed(()=> complaintResolveList.value.at(-1) ?? undefined)
+
 const showUpdateForm = ref(false)
 
 const handleDetail = (row: Complaint) => {
@@ -437,7 +439,7 @@ const formComplaintResolve = ref<Omit<ComplaintResolveHistoryInsertRequest, 'tic
 })
 
 const { loading: createComplaintResolveLoading, doLoading: createComplaintResolve } = useLoading(async () => {
-	const valid = await formComplaintResolve.value?.description?.trim()
+	const valid = formComplaintResolve.value?.description?.trim()
 	if (!valid) {
 		ElMessage.error('请输入处理描述')
 		return
@@ -956,12 +958,12 @@ const { loading: createComplaintResolveLoading, doLoading: createComplaintResolv
 							<div class="process-info">
 								<div class="current-status">
 									<span class="status-label">当前状态</span>
-									<div class="status-value">{{ formatReportStatus(complaintDetail.status) }}</div>
+									<div class="status-value">{{ formatReportStatus(currentResolveStatus?.status) }}</div>
 								</div>
 
 								<div class="process-note">
 									<span class="note-label">处理备注</span>
-									<div class="note-content">{{ complaintDetail.assignee ? '已安排工程队前往现场查看，预计今日内完成修复。' : '暂无处理备注' }}</div>
+									<div class="note-content">{{ currentResolveStatus?.description }}</div>
 								</div>
 
 								<el-button
