@@ -43,20 +43,6 @@ const formatReportLevel = computed<(value: string) => string>(() => {
 })
 
 // eslint-disable-next-line no-unused-vars
-const formatReportSource = computed<(value: string) => string>(() => {
-	const sources = unref(report_source)
-	return (value: string) => {
-		if (value === undefined) {
-			return '-'
-		}
-		if (sources === undefined) {
-			return '-'
-		}
-		return proxy.selectDictLabel(sources, value)
-	}
-})
-
-// eslint-disable-next-line no-unused-vars
 const formatReportType = computed<(value: string) => string>(() => {
 	const types = unref(report_type)
 	return (value: string) => {
@@ -479,7 +465,7 @@ const {loading: createFeedbackLoading, doLoading: createFeedback} = useLoading(a
 			<!-- 表格 -->
 			<el-table :data="tableData" v-loading="loading" @selection-change="handleSelectionChange" style="width: 100%">
 				<el-table-column type="selection" width="55" align="center" />
-				<el-table-column prop="id" label="标识" width="120" align="center">
+				<el-table-column prop="id" label="标识" width="160" align="center">
 					<template #default="{ row }">
 						<div class="flex items-center">
 							<div class="w-2 h-2 bg-blue-500 rounded-full mr-2"></div>

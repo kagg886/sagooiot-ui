@@ -425,17 +425,9 @@ const {state: recentComplaints} = useAsyncState<Complaint[]>(async () => report.
 <template>
 	<div class="page">
 		<el-card shadow="never">
-			<!-- 面包屑导航 -->
-			<div class="breadcrumb-container mb-4">
-				<span class="text-gray-500">投诉管理</span>
-				<span class="mx-2 text-gray-400">/</span>
-				<span>概要统计</span>
-			</div>
-
 			<!-- 标题和时间选择器 -->
-			<div class="flex justify-between items-center mb-6">
-				<h2 class="text-xl font-semibold">概要统计</h2>
-				<el-select v-model="timeRange" placeholder="本月" style="width: 120px" @change="handleTimeRangeChange">
+			<div class="flex justify-between flex-direction-end mb-6">
+				<el-select v-model="timeRange" placeholder="本月" style="width: 120px">
 					<el-option label="本周" value="week" />
 					<el-option label="本月" value="month" />
 					<el-option label="本季度" value="quarter" />
@@ -673,6 +665,9 @@ const {state: recentComplaints} = useAsyncState<Complaint[]>(async () => report.
 </template>
 
 <style scoped lang="scss">
+.flex-direction-end {
+	flex-direction: row-reverse;
+}
 .page {
 	padding: 20px;
 }
@@ -873,8 +868,8 @@ const {state: recentComplaints} = useAsyncState<Complaint[]>(async () => report.
 	justify-content: space-between;
 }
 
-.items-center {
-	align-items: center;
+.items-end {
+	align-items: end;
 }
 
 .mb-4 {
