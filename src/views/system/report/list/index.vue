@@ -16,6 +16,7 @@ import {
 import system from '/@/api/system'
 import { useAsyncState, useLocalStorage } from '@vueuse/core'
 import ReportDetailDialog from '/@/views/system/report/componments/report-detail-dialog.vue'
+import { MessageParamsWithType, MessageProps } from 'element-plus/es/components/message/src/message'
 
 const { proxy } = getCurrentInstance() as any
 
@@ -75,16 +76,16 @@ const formatReportStatus = (value: Complaint['status']) => {
 }
 
 const formatReportStatusTagType = (value: Complaint['status']) => {
-	let type = 'info'
+	let type: MessageProps['type'] | undefined = undefined
 	switch (value) {
 		case 'completed':
 			type = 'success'
 			break
 		case 'pending':
-			type = 'warning'
+			type = 'info'
 			break
 		case 'processing':
-			type = 'primary'
+			type = undefined
 			break
 	}
 	return type
