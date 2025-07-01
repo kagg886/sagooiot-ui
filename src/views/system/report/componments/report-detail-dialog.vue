@@ -199,7 +199,7 @@ const { loading: createComplaintResolveLoading, doLoading: createComplaintResolv
 				</div>
 			</div>
 
-			<el-row :gutter="20" class="mt-4">
+			<el-row :gutter="20" class="mt-4" >
 				<!-- 左侧基本信息 -->
 				<el-col :span="14">
 					<el-card shadow="never" class="info-card">
@@ -212,35 +212,37 @@ const { loading: createComplaintResolveLoading, doLoading: createComplaintResolv
 							</div>
 						</template>
 
-						<el-row :gutter="16" class="info-row">
-							<el-col :span="12">
-								<div class="info-item">
-									<span class="info-label">投诉类型</span>
-									<span class="info-value">{{ formatReportType(complaintDetail?.category) }}</span>
-								</div>
-							</el-col>
-							<el-col :span="12">
-								<div class="info-item">
-									<span class="info-label">投诉来源</span>
-									<span class="info-value">{{ formatReportSource(complaintDetail?.source) }}</span>
-								</div>
-							</el-col>
-						</el-row>
+						<div v-loading="complaintDetailLoading">
+							<el-row :gutter="16" class="info-row" >
+								<el-col :span="12">
+									<div class="info-item">
+										<span class="info-label">投诉类型</span>
+										<span class="info-value">{{ formatReportType(complaintDetail?.category) }}</span>
+									</div>
+								</el-col>
+								<el-col :span="12">
+									<div class="info-item">
+										<span class="info-label">投诉来源</span>
+										<span class="info-value">{{ formatReportSource(complaintDetail?.source) }}</span>
+									</div>
+								</el-col>
+							</el-row>
 
-						<el-row :gutter="16" class="info-row">
-							<el-col :span="12">
-								<div class="info-item">
-									<span class="info-label">投诉区域</span>
-									<span class="info-value">{{ complaintDetail?.area }}</span>
-								</div>
-							</el-col>
-							<el-col :span="12">
-								<div class="info-item">
-									<span class="info-label">负责人</span>
-									<span class="info-value">{{ complaintDetail?.assignee ?? '-' }}</span>
-								</div>
-							</el-col>
-						</el-row>
+							<el-row :gutter="16" class="info-row">
+								<el-col :span="12">
+									<div class="info-item">
+										<span class="info-label">投诉区域</span>
+										<span class="info-value">{{ complaintDetail?.area }}</span>
+									</div>
+								</el-col>
+								<el-col :span="12">
+									<div class="info-item">
+										<span class="info-label">负责人</span>
+										<span class="info-value">{{ complaintDetail?.assignee ?? '-' }}</span>
+									</div>
+								</el-col>
+							</el-row>
+						</div>
 					</el-card>
 
 					<!-- 投诉内容 -->
@@ -253,7 +255,7 @@ const { loading: createComplaintResolveLoading, doLoading: createComplaintResolv
 								<span>投诉内容</span>
 							</div>
 						</template>
-						<div class="complaint-content">
+						<div class="complaint-content" v-loading="complaintDetailLoading">
 							{{ complaintDetail?.content ?? '' }}
 						</div>
 					</el-card>
@@ -462,6 +464,7 @@ const { loading: createComplaintResolveLoading, doLoading: createComplaintResolv
 			}
 
 			.info-value {
+				min-height: 20px;
 				font-size: 14px;
 				color: #303133;
 				font-weight: 500;

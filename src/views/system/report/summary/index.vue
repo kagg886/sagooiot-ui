@@ -25,6 +25,7 @@ import { LabelLayout } from 'echarts/features'
 import { CanvasRenderer } from 'echarts/renderers'
 import { useAsyncState, useEventListener } from '@vueuse/core'
 import { BarSeriesOption, ComposeOption, PieSeriesOption } from 'echarts'
+import ReportDetailDialog from '/@/views/system/report/componments/report-detail-dialog.vue'
 
 // 注册必须的组件
 echarts.use([TitleComponent, TooltipComponent, LegendComponent, GridComponent, PieChartComponent, BarChart, LineChart, LabelLayout, CanvasRenderer])
@@ -418,10 +419,18 @@ watch(areaDistributionOption, (newVal) => {
 	}
 })
 
-const {state: recentComplaints} = useAsyncState<Complaint[]>(async () => report.getList({orderBy: 'desc'}).then((res: {list: Complaint[]})=>res.list),[])
+const {state: recentComplaints} = useAsyncState<Complaint[]>(async () => report.getList({orderBy: 'desc',pageSize: 5}).then((res: {list: Complaint[]})=>res.list),[])
 
+
+const detailVisible = ref(false)
+const detailComplaint = ref<number|undefined>(undefined)
 const handleDetail = (complaint: Complaint) => {
-	proxy.$router.push('/system/report/list?id=' + complaint.id)
+	detailComplaint.value = complaint.id
+	detailVisible.value = true
+}
+
+const openAll = () => {
+	proxy.$router.push('/system/report/list')
 }
 </script>
 
@@ -638,7 +647,7 @@ const handleDetail = (complaint: Complaint) => {
 						</el-icon>
 						最近投诉动态
 					</div>
-					<el-button type="primary" link @click="viewAll">查看全部</el-button>
+					<el-button type="primary" link @click="openAll">查看全部</el-button>
 				</div>
 
 				<div class="complaint-list">
@@ -664,6 +673,8 @@ const handleDetail = (complaint: Complaint) => {
 				</div>
 			</div>
 		</el-card>
+
+		<report-detail-dialog :id="detailComplaint" v-model:visible="detailVisible"/>
 	</div>
 </template>
 

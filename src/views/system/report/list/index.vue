@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, getCurrentInstance, unref, computed, toRefs } from 'vue'
+import { ref, onMounted, getCurrentInstance, unref, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Plus, Delete, View, Edit } from '@element-plus/icons-vue'
 import { useLoading } from '/@/utils/loading-util'
@@ -14,8 +14,7 @@ import {
 	FeedbackCreateParams,
 } from '/@/api/system/report/type'
 import system from '/@/api/system'
-import { useAsyncState } from '@vueuse/core'
-import { useRoute } from 'vue-router'
+import { useAsyncState, useLocalStorage } from '@vueuse/core'
 import ReportDetailDialog from '/@/views/system/report/componments/report-detail-dialog.vue'
 
 const { proxy } = getCurrentInstance() as any
@@ -75,6 +74,22 @@ const formatReportStatus = (value: Complaint['status']) => {
 	return a
 }
 
+const formatReportStatusTagType = (value: Complaint['status']) => {
+	let type = 'info'
+	switch (value) {
+		case 'completed':
+			type = 'success'
+			break
+		case 'pending':
+			type = 'warning'
+			break
+		case 'processing':
+			type = 'primary'
+			break
+	}
+	return type
+}
+
 // 响应式数据
 const tableData = ref<Complaint[]>([])
 const total = ref(0)
@@ -130,6 +145,25 @@ const addForm = ref<CreateComplaintRequest>({
 	assignee: undefined,
 })
 
+//草稿，若有内容则会patch上去
+//添加flag的原因是：useLocalStorage不允许初值为undefined
+//flag为undefined证明有草稿，否则无草稿。
+type CCRWithDemoFlag = Partial<CreateComplaintRequest> & {
+	flag: boolean | undefined
+}
+
+const demo = useLocalStorage<CCRWithDemoFlag>('system-report-summary-index-demo-params',{
+	flag: false
+})
+
+onMounted(()=> {
+	if (demo.value.flag !== undefined) {
+		addForm.value = {
+			...(demo.value as CreateComplaintRequest)
+		}
+	}
+})
+
 // 表单验证规则
 const addFormRules = {
 	title: [{ required: true, message: '请输入投诉标题', trigger: 'blur' }],
@@ -150,6 +184,14 @@ const handleAddCancel = () => {
 	addFormRef.value?.resetFields()
 }
 
+const handleDemoAdded = () => {
+	demo.value = {
+		...addForm.value,
+		flag: true
+	}
+	ElMessage.success('草稿已经保存')
+}
+
 const handleAddConfirm = async () => {
 	const valid = await addFormRef.value?.validate().catch(() => false)
 	if (!valid) {
@@ -163,6 +205,13 @@ const handleAddConfirm = async () => {
 
 	if (result) {
 		ElMessage.success('新增投诉成功')
+
+		//删除草稿
+		demo.value = {
+			flag: undefined
+		}
+
+		//关闭新增对话框
 		addDialogVisible.value = false
 		addFormRef.value?.resetFields()
 		await getComplaintList()
@@ -391,24 +440,6 @@ const { loading: createFeedbackLoading, doLoading: createFeedback } = useLoading
 	handleFeedbackCancel()
 })
 
-//反馈详情
-//如果路由有参数就直接获取
-
-const {query} = toRefs(useRoute())
-
-onMounted(async ()=> {
-	if (query.value["id"]) {
-		const result = await complaints.detail(Number(query.value["id"]))
-			.catch(()=>undefined)
-
-		if (result === undefined) {
-			return
-		}
-
-		handleDetail(result)
-	}
-})
-
 const complaintDetailId = ref<number | undefined>(undefined)
 const showDetail = ref(false)
 const handleDetail = (row: Complaint) => {
@@ -484,14 +515,7 @@ const handleDetail = (row: Complaint) => {
 			<!-- 表格 -->
 			<el-table :data="tableData" v-loading="loading" @selection-change="handleSelectionChange" style="width: 100%">
 				<el-table-column type="selection" width="55" align="center" />
-				<el-table-column prop="id" label="标识" width="160" align="center">
-					<template #default="{ row }">
-						<div class="flex items-center">
-							<div class="w-2 h-2 bg-blue-500 rounded-full mr-2"></div>
-							<span class="text-blue-600">#{{ row.id }}</span>
-						</div>
-					</template>
-				</el-table-column>
+				<el-table-column prop="id" label="标识" width="160" align="center"/>
 				<el-table-column prop="title" label="投诉标题" min-width="200" show-overflow-tooltip />
 				<el-table-column prop="category" label="投诉类型" width="120" align="center">
 					<template #default="{ row }: { row: Complaint }">
@@ -506,7 +530,7 @@ const handleDetail = (row: Complaint) => {
 				</el-table-column>
 				<el-table-column prop="status" label="状态" width="100" align="center">
 					<template #default="{ row }: { row: Complaint }">
-						<span>{{ formatReportStatus(row.status) }}</span>
+						<el-tag :type="formatReportStatusTagType(row.status)">{{ formatReportStatus(row.status) }}</el-tag>
 					</template>
 				</el-table-column>
 				<el-table-column prop="updatedAt" label="最后更新时间" width="180" align="center" />
@@ -557,39 +581,52 @@ const handleDetail = (row: Complaint) => {
 		</el-card>
 
 		<!-- 新增投诉对话框 -->
-		<el-dialog v-model="addDialogVisible" title="新建投诉" width="600px" :close-on-click-modal="false">
+		<el-dialog v-model="addDialogVisible" title="新建投诉" width="800px" :close-on-click-modal="false">
 			<el-form ref="addFormRef" :model="addForm" :rules="addFormRules" label-width="100px" label-position="left">
-				<el-form-item label="投诉标题" prop="title" required>
-					<el-input v-model="addForm.title" placeholder="请输入投诉标题" maxlength="100" show-word-limit />
-				</el-form-item>
+				<el-row :gutter="35">
+					<el-col :xs="24" :sm="12" :md="12" :lg="12" :xl="12" >
+						<el-form-item label="投诉标题" prop="title" required>
+							<el-input v-model="addForm.title" placeholder="请输入投诉标题" maxlength="100" show-word-limit />
+						</el-form-item>
+					</el-col>
 
-				<el-form-item label="投诉类型" prop="category" required>
-					<el-select v-model="addForm.category" placeholder="选择投诉类型" style="width: 100%">
-						<el-option v-for="item in report_type" :key="item.value" :label="item.label" :value="item.value" />
-					</el-select>
-				</el-form-item>
+					<el-col :xs="24" :sm="12" :md="12" :lg="12" :xl="12">
+						<el-form-item label="投诉类型" prop="category" required>
+							<el-select v-model="addForm.category" placeholder="选择投诉类型" style="width: 100%">
+								<el-option v-for="item in report_type" :key="item.value" :label="item.label" :value="item.value" />
+							</el-select>
+						</el-form-item>
+					</el-col>
 
-				<el-form-item label="投诉来源" prop="source" required>
-					<el-select v-model="addForm.source" placeholder="选择投诉来源" style="width: 100%">
-						<el-option v-for="item in report_source" :key="item.value" :label="item.label" :value="item.value" />
-					</el-select>
-				</el-form-item>
+					<el-col :xs="24" :sm="12" :md="12" :lg="12" :xl="12">
+						<el-form-item label="投诉来源" prop="source" required>
+							<el-select v-model="addForm.source" placeholder="选择投诉来源" style="width: 100%">
+								<el-option v-for="item in report_source" :key="item.value" :label="item.label" :value="item.value" />
+							</el-select>
+						</el-form-item>
+					</el-col>
 
-				<el-form-item label="投诉区域" prop="area" required>
-					<el-select v-model="addForm.area" placeholder="选择投诉区域" style="width: 100%">
-						<el-option label="A区" value="A区" />
-						<el-option label="B区" value="B区" />
-					</el-select>
-				</el-form-item>
+					<el-col :xs="24" :sm="12" :md="12" :lg="12" :xl="12">
+						<el-form-item label="投诉区域" prop="area" required>
+							<el-select v-model="addForm.area" placeholder="选择投诉区域" style="width: 100%">
+								<el-option label="A区" value="A区" />
+								<el-option label="B区" value="B区" />
+							</el-select>
+						</el-form-item>
+					</el-col>
 
-				<el-form-item label="投诉人姓名" prop="complainantName" required>
-					<el-input v-model="addForm.complainantName" placeholder="请输入投诉人姓名" maxlength="50" />
-				</el-form-item>
+					<el-col :xs="24" :sm="12" :md="12" :lg="12" :xl="12">
+						<el-form-item label="投诉人姓名" prop="complainantName" required>
+							<el-input v-model="addForm.complainantName" placeholder="请输入投诉人姓名" maxlength="50" />
+						</el-form-item>
+					</el-col>
 
-				<el-form-item label="联系方式" prop="contact">
-					<el-input v-model="addForm.contact" placeholder="请输入联系电话或邮箱" maxlength="50" />
-				</el-form-item>
-
+					<el-col :xs="24" :sm="12" :md="12" :lg="12" :xl="12">
+						<el-form-item label="联系方式" prop="contact">
+							<el-input v-model="addForm.contact" placeholder="请输入联系电话或邮箱" maxlength="50" />
+						</el-form-item>
+					</el-col>
+				</el-row>
 				<el-form-item label="投诉等级" prop="level" required>
 					<el-radio-group v-model="addForm.level">
 						<el-radio v-for="item in report_level" :label="item.value" :key="item.value">
@@ -622,12 +659,9 @@ const handleDetail = (row: Complaint) => {
 				<div class="dialog-footer">
 					<el-button @click="handleAddCancel">取消</el-button>
 					<el-button type="primary" @click="handleAddConfirm">
-						<el-icon>
-							<Plus />
-						</el-icon>
 						提交投诉
 					</el-button>
-					<el-button @click="handleAddCancel">保存草稿</el-button>
+					<el-button @click="handleDemoAdded">保存草稿</el-button>
 				</div>
 			</template>
 		</el-dialog>
@@ -710,9 +744,6 @@ const handleDetail = (row: Complaint) => {
 				<div class="dialog-footer">
 					<el-button @click="handleEditCancel">取消</el-button>
 					<el-button type="primary" @click="handleEditConfirm">
-						<el-icon>
-							<ele-Check />
-						</el-icon>
 						提交修改
 					</el-button>
 					<el-button @click="handleEditCancel">保存草稿</el-button>
