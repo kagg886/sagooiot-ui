@@ -420,6 +420,9 @@ watch(areaDistributionOption, (newVal) => {
 
 const {state: recentComplaints} = useAsyncState<Complaint[]>(async () => report.getList({orderBy: 'desc'}).then((res: {list: Complaint[]})=>res.list),[])
 
+const handleDetail = (complaint: Complaint) => {
+	proxy.$router.push('/system/report/list?id=' + complaint.id)
+}
 </script>
 
 <template>
@@ -654,7 +657,7 @@ const {state: recentComplaints} = useAsyncState<Complaint[]>(async () => report.
 								<el-tag size="small">
 									{{ formatReportStatus(complaint.status) }}
 								</el-tag>
-								<el-button type="primary" link size="small">详情</el-button>
+								<el-button type="primary" link size="small" @click="handleDetail(complaint)">详情</el-button>
 							</div>
 						</div>
 					</div>

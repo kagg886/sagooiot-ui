@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, getCurrentInstance, unref, computed } from 'vue'
+import { ref, onMounted, getCurrentInstance, unref, computed, toRefs } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Plus, Delete, View, Edit } from '@element-plus/icons-vue'
 import { useLoading } from '/@/utils/loading-util'
@@ -17,6 +17,7 @@ import {
 } from '/@/api/system/report/type'
 import system from '/@/api/system'
 import { useAsyncState } from '@vueuse/core'
+import { useRoute } from 'vue-router'
 
 const { proxy } = getCurrentInstance() as any
 
@@ -404,6 +405,24 @@ const { loading: createFeedbackLoading, doLoading: createFeedback } = useLoading
 		ElMessage.success('反馈成功')
 	}
 	handleFeedbackCancel()
+})
+
+//反馈详情
+//如果路由有参数就直接获取
+
+const {query} = toRefs(useRoute())
+
+onMounted(async ()=> {
+	if (query.value["id"]) {
+		const result = await complaints.detail(Number(query.value["id"]))
+			.catch(()=>undefined)
+
+		if (result === undefined) {
+			return
+		}
+
+		handleDetail(result)
+	}
 })
 
 const complaintDetailDialogShow = ref(false)
